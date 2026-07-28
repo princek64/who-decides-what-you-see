@@ -1,0 +1,53 @@
+import React from 'react';
+import type { Flight } from '../../hooks/useFlightFilter';
+import { Plane } from 'lucide-react';
+
+// Compact clickable flight row shared by several layouts
+// (ranked list, budget list, alert alternatives, highlight alternates).
+export const formatRowDate = (dateStr: string): string => {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return isNaN(d.getTime())
+    ? dateStr
+    : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+};
+
+export const FlightRow: React.FC<{
+  flight: Flight;
+  onSelect: (flight: Flight) => void;
+  prefix?: React.ReactNode;
+  suffix?: React.ReactNode;
+}> = ({ flight, onSelect, prefix, suffix }) => (
+  <button
+    type="button"
+    onClick={() => onSelect(flight)}
+    className="w-full flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 bg-card border border-border rounded-lg hover:border-white/20 transition-colors text-left"
+  >
+    {prefix}
+    <div className="w-[120px] shrink-0 min-w-0">
+      <div className="text-xs font-semibold text-foreground truncate">{flight.airline_name}</div>
+      <div className="text-[10px] font-mono tabular-nums text-muted-foreground truncate">
+        {flight.flight_number} · {formatRowDate(flight.date)}
+      </div>
+    </div>
+    {/* Route/times: inline on ≥sm, but its own full-width line on phones. The
+        children are shrink-0 and don't wrap, so keeping them on the airline↔price
+        line overflowed and overlapped the price at iPhone widths (375–414px). */}
+    <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1 flex items-center gap-2 min-w-0">
+      <span className="text-sm font-mono tabular-nums font-semibold text-foreground shrink-0">{flight.departure_time}</span>
+      <span className="text-[10px] font-mono font-medium text-muted-foreground shrink-0">{flight.origin_code}</span>
+      <span className="flex-1 flex items-center relative min-w-[24px]">
+        <span className="h-px bg-border w-full"></span>
+        <Plane className="w-2.5 h-2.5 text-muted-foreground absolute left-1/2 -translate-x-1/2 bg-card px-0.5" />
+      </span>
+      <span className="text-[10px] font-mono font-medium text-muted-foreground shrink-0">{flight.dest_code}</span>
+      <span className="text-sm font-mono tabular-nums font-semibold text-foreground shrink-0">{flight.arrival_time}</span>
+      <span className="hidden sm:inline text-[10px] font-mono tabular-nums text-muted-foreground shrink-0 ml-1">
+        {flight.duration_formatted} · {flight.stops === 0 ? 'Direct' : `${flight.stops} stop`}
+      </span>
+    </div>
+    <div className="shrink-0 text-right ml-auto sm:ml-0">
+      <span className="text-sm font-mono tabular-nums font-semibold text-foreground">£{flight.price_gbp.toFixed(2)}</span>
+    </div>
+    {suffix}
+  </button>
+);

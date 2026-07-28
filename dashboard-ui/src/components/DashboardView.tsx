@@ -1,0 +1,561 @@
+import React, { useState } from 'react';
+import { useFlights } from '../hooks/useFlights';
+import type { Flight } from '../hooks/useFlights';
+import { useSessionLogger } from '../hooks/useSessionLogger';
+import { SearchBar } from './SearchBar';
+import { FilterBar } from './FilterBar';
+import { StatsBar } from './StatsBar';
+import { SortBar } from './SortBar';
+import { FlightCard } from './FlightCard';
+import { FlightDetailModal } from './FlightDetailModal';
+import { Button } from './ui/button';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { HelpCircle, Plane, ArrowLeft, ArrowRight, Pencil, ChevronUp } from 'lucide-react';
+import { FlightSketchLogo } from './FlightSketchLogo';
+import { RoundTripCard } from './RoundTripCard';
+import { ResultsSkeleton } from './ResultsSkeleton';
+import { SearchProgress } from './SearchProgress';
+import { getCityName } from '../lib/airportMap';
+import { useIsMobile } from '../hooks/useIsMobile';
+
+// How long the search-pending state is held. Filtering is synchronous, so this
+// is a fixed presentational window: without it the results replace the hero in
+// the same frame as the click, which reads as "nothing happened" rather than as
+// a search. Long enough to register the progress bar and skeleton, short enough
+// not to add meaningful time to a participant's task.
+const SEARCH_LOADING_MS = 800;
+
+export const DashboardView: React.FC = () => {
+  const {
+    flights,
+    rawFlights,
+    totalFilteredCount,
+    isLoading,
+    searchState,
+    filters,
+    sortType,
+    uniqueAirlines,
+    airlinePrices,
+    medianCo2,
+    stats,
+    updateSearch,
+    updateFilter,
+    resetFilters,
+    updateSortType,
+  } = useFlights();
+
+  const { logCardClick, logDetailView } = useSessionLogger();
+  const isMobile = useIsMobile();
+  // One flight (one-way) or [outbound, return] shown in the detail popup
+  const [selectedFlights, setSelectedFlights] = useState<Flight[] | null>(null);
+
+  // Travellers — display-only multiplier; all fares in the data are per adult
+  const [adults, setAdults] = useState(1);
+
+  // Track if search has been run
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // Mobile only: after a search the full search form collapses into a compact
+  // sticky summary so results land above the fold. Tapping it re-expands the
+  // form. Desktop always shows the full form (this flag is ignored ≥sm).
+  const [mobileFormExpanded, setMobileFormExpanded] = useState(false);
+
+  // Loading state for a submitted search (see SEARCH_LOADING_MS above).
+  const [resultsLoading, setResultsLoading] = useState(false);
+  const loadingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const beginResultsLoading = React.useCallback(() => {
+    if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+    setResultsLoading(true);
+    loadingTimerRef.current = setTimeout(() => setResultsLoading(false), SEARCH_LOADING_MS);
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+    };
+  }, []);
+
+  const exampleSearches = [
+    { label: 'London to Barcelona', originCode: 'LON', destCity: 'Barcelona', date: '2026-07-20', direction: 'outbound' as const },
+    { label: 'London Heathrow to Paris', originCode: 'LHR', destCity: 'Paris', date: '2026-07-25', direction: 'outbound' as const },
+    { label: 'London to Rome (Round trip)', originCode: 'LON', destCity: 'Rome', date: '2026-08-15', endDate: '2026-08-22', direction: 'return' as const }
+  ];
+
+  const handleSearchSubmit = (newSearch: { originCode: string; destCity: string; date: string; endDate?: string; direction: 'outbound' | 'return'; passengers: number }) => {
+    setAdults(newSearch.passengers);
+    updateSearch({
+      originCode: newSearch.originCode,
+      destCity: newSearch.destCity,
+      date: newSearch.date,
+      endDate: newSearch.endDate,
+      direction: newSearch.direction,
+    });
+    // An empty destination is a valid "anywhere" search (e.g. the open-ended
+    // "£150 budget, where can I go?" research task) — always show results.
+    setHasSearched(true);
+    setMobileFormExpanded(false);
+    beginResultsLoading();
+  };
+
+  const handleExampleClick = (example: typeof exampleSearches[0]) => {
+    const newSearch = {
+      originCode: example.originCode,
+      destCity: example.destCity,
+      date: example.date,
+      endDate: example.endDate || '2026-07-27',
+      direction: example.direction,
+    };
+    updateSearch(newSearch);
+    setHasSearched(true);
+    setMobileFormExpanded(false);
+    beginResultsLoading();
+  };
+
+  // Reference for the virtual list scroll container
+  const parentRef = React.useRef<HTMLDivElement>(null);
+
+  const isRoundTrip = searchState.direction === 'return';
+
+  // How many of each leg survive the filters (drives the empty-state copy)
+  const legCounts = React.useMemo(() => {
+    if (!isRoundTrip) return { outbound: flights.length, return: 0 };
+    let outbound = 0;
+    for (const f of flights) if (f.direction === 'outbound') outbound++;
+    return { outbound, return: flights.length - outbound };
+  }, [flights, isRoundTrip]);
+
+  // Skyscanner-style round-trip itineraries: pair each outbound leg with
+  // return legs FROM THE SAME AIRPORT (so an "anywhere" search never mixes
+  // cities), rank the pairs by the active sort criterion, and cap the
+  // combinations to keep the list usable.
+  const PAIR_OUTBOUND_CAP = 120;
+  const PAIR_RETURNS_PER_OUTBOUND = 8;
+  const PAIR_RESULT_CAP = 400;
+  const roundTripPairs = React.useMemo(() => {
+    if (!isRoundTrip) return [];
+    const outbound: Flight[] = [];
+    const returnsByAirport: Record<string, Flight[]> = {};
+    for (const f of flights) {
+      if (f.direction === 'outbound') {
+        if (outbound.length < PAIR_OUTBOUND_CAP) outbound.push(f);
+      } else {
+        (returnsByAirport[f.origin_code] ||= []).push(f);
+      }
+    }
+    const pairs: { out: Flight; ret: Flight }[] = [];
+    for (const out of outbound) {
+      const candidates = returnsByAirport[out.dest_code];
+      if (!candidates) continue;
+      // Both lists inherit the active sort order, so the first few return
+      // candidates are the best ones under the current criterion.
+      for (const ret of candidates.slice(0, PAIR_RETURNS_PER_OUTBOUND)) {
+        pairs.push({ out, ret });
+      }
+    }
+    const rank = (p: { out: Flight; ret: Flight }) => {
+      switch (sortType) {
+        case 'cheapest': return p.out.price_gbp + p.ret.price_gbp;
+        case 'fastest': return p.out.duration_mins + p.ret.duration_mins;
+        case 'earliest': return p.out.departure_mins_from_midnight;
+        case 'latest': return -p.out.departure_mins_from_midnight;
+        default: return 0;
+      }
+    };
+    pairs.sort((a, b) => rank(a) - rank(b));
+    return pairs.slice(0, PAIR_RESULT_CAP);
+  }, [flights, isRoundTrip, sortType]);
+
+  const resultCount = isRoundTrip ? roundTripPairs.length : flights.length;
+  const hasResults = resultCount > 0;
+
+  const originLabel = searchState.originCode === 'LON' ? 'London' : getCityName(searchState.originCode);
+  const destLabel = searchState.destCity
+    ? searchState.destCity.charAt(0).toUpperCase() + searchState.destCity.slice(1)
+    : 'All destinations';
+
+  // Compact one-line pieces for the mobile collapsed search summary
+  const fmtSummaryDate = (d: string) => {
+    const dt = new Date(`${d}T00:00:00`);
+    return isNaN(dt.getTime()) ? d : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
+  const summaryOrigin = searchState.originCode === 'LON' ? 'LON' : searchState.originCode;
+  const summaryDest = searchState.destCity ? destLabel : 'Anywhere';
+  const summaryDates = searchState.date
+    ? (isRoundTrip && searchState.endDate
+        ? `${fmtSummaryDate(searchState.date)} – ${fmtSummaryDate(searchState.endDate)}`
+        : fmtSummaryDate(searchState.date))
+    : '';
+
+  // Virtualizer setup — fixed row heights. Mobile cards are shorter (the card
+  // layouts drop metadata below sm), so the row height has to follow the
+  // breakpoint or the rows overlap / leave gaps.
+  //   desktop: 216px itinerary, 200px one-way   mobile: 196px / 180px
+  const rowVirtualizer = useVirtualizer({
+    count: resultCount,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () =>
+      isRoundTrip ? (isMobile ? 148 : 216) : isMobile ? 180 : 200,
+    overscan: 5,
+  });
+
+  // Row heights differ between one-way and round-trip result sets, and between
+  // the mobile and desktop card layouts
+  React.useEffect(() => {
+    rowVirtualizer.measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRoundTrip, resultCount, isMobile]);
+
+  const handleFlightSelect = (flight: Flight) => {
+    logCardClick(flight.flight_id);
+    logDetailView(flight.flight_id);
+    setSelectedFlights([flight]);
+  };
+
+  // Round-trip card click: both legs open in one popup, so both are logged
+  // as viewed (one card_click + detail_view per flight, same event schema).
+  const handlePairSelect = (outbound: Flight, inbound: Flight) => {
+    logCardClick(outbound.flight_id);
+    logDetailView(outbound.flight_id);
+    logCardClick(inbound.flight_id);
+    logDetailView(inbound.flight_id);
+    setSelectedFlights([outbound, inbound]);
+  };
+
+  // Full-page loading screen
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 select-none">
+        <div className="w-24 h-24 rounded-full border border-dashed border-border flex items-center justify-center overflow-hidden bg-muted relative">
+          <FlightSketchLogo size={36} className="text-foreground animate-flight-takeoff" />
+        </div>
+        <div className="mt-4 text-xs font-mono text-muted-foreground uppercase tracking-widest animate-pulse">
+          Launching Flight Dashboard...
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* 1. Sticky Header */}
+      <header className="sticky top-0 z-40 bg-background border-b border-border h-16 px-4 md:px-8 flex justify-between items-center select-none">
+        <button
+          type="button"
+          onClick={() => hasSearched && setHasSearched(false)}
+          disabled={!hasSearched}
+          aria-label={hasSearched ? 'Back to search' : 'Flight Dashboard'}
+          className={`flex items-center gap-2.5 text-left rounded-md -mx-1 px-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${hasSearched ? 'hover:bg-secondary cursor-pointer' : 'cursor-default'}`}
+        >
+          <div className="w-9 h-9 flex items-center justify-center text-foreground">
+            <FlightSketchLogo size={28} />
+          </div>
+          <div className="text-left">
+            <h1 className="text-sm font-semibold text-foreground tracking-tight leading-none">Flight Dashboard</h1>
+          </div>
+        </button>
+
+        {/* Results indicator */}
+        <div className="flex items-center gap-3">
+          {hasSearched && (
+            resultsLoading ? (
+              /* Counts from the previous query would read as this query's
+                 answer, so they are held back until the search resolves */
+              <div className="text-right flex flex-col items-end gap-1 animate-pulse" aria-hidden="true">
+                <div className="h-3 w-28 rounded bg-muted" />
+                <div className="h-2.5 w-20 rounded bg-muted" />
+              </div>
+            ) : (
+              <div className="text-right">
+                <div className="text-xs font-medium text-foreground">
+                  Showing <span className="font-mono tabular-nums">{resultCount.toLocaleString()}</span> {isRoundTrip ? 'itineraries' : 'flights'}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  of <span className="font-mono tabular-nums">{totalFilteredCount.toLocaleString()}</span> matched flights
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-4 md:p-6 gap-6 box-border">
+        {!hasSearched ? (
+          /* Pre-search hero: the search card sits ~30% down the viewport (not
+             vertically centred), with a tight logo→heading→subtext rhythm above it */
+          /* max-[480px]:px-0 — <main> already pads 16px; doubling it here left
+             the search card too narrow for its own trip-options row */
+          <div className="flex-1 flex flex-col items-center justify-start pt-[16vh] max-[480px]:pt-6 max-w-5xl w-full mx-auto p-4 max-[480px]:px-0 md:px-8 animate-fade-in select-none">
+            <div className="w-14 h-14 max-[480px]:w-11 max-[480px]:h-11 rounded-full bg-card flex items-center justify-center border border-border shadow-card mb-3 max-[480px]:mb-2 overflow-hidden p-2.5 max-[480px]:p-2 text-foreground">
+              <FlightSketchLogo size={36} className="animate-pulse" style={{ width: '100%', height: '100%' }} />
+            </div>
+            <h2 className="text-3xl max-[480px]:text-[1.5rem] font-semibold text-foreground tracking-tighter text-center mb-1.5 max-[480px]:mb-1">Find your next flight.</h2>
+            <p className="text-sm max-[480px]:text-xs text-muted-foreground text-center mb-5 max-[480px]:mb-3 max-w-md">
+              Search for outbound and return flights across Europe, with details on pricing, cabin classes, and CO₂ emissions.
+            </p>
+
+            <div className="w-full">
+              <SearchBar
+                initialOrigin={searchState.originCode}
+                initialDest={searchState.destCity}
+                initialDate={searchState.date}
+                initialEndDate={searchState.endDate}
+                initialDirection={searchState.direction}
+                initialPassengers={adults}
+                rawFlights={rawFlights}
+                cabinClass={filters.cabinClass}
+                onCabinChange={(val) => updateFilter('cabinClass', val)}
+                onSearch={handleSearchSubmit}
+                isSearching={resultsLoading}
+              />
+            </div>
+
+            {/* Hint line / example searches below the search bar */}
+            <div className="mt-4 text-center">
+              <span className="text-xs text-muted-foreground">Try searching: </span>
+              <div className="inline-flex flex-wrap gap-2 justify-center mt-1">
+                {exampleSearches.map((example, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleExampleClick(example)}
+                    /* Ghost pill per DESIGN.md — suggestion chips are inactive
+                       chips, not links, so they stay monochrome; blue is
+                       reserved for links / focus / the primary action. */
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground bg-transparent hover:bg-muted border border-border px-3 py-1 rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    {example.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* 2. Top Search Bar */}
+            <section aria-label="Search Controls" className="flex flex-col gap-3">
+              {/* Desktop back-to-hero link (mobile uses the header logo for this) */}
+              <button
+                type="button"
+                onClick={() => setHasSearched(false)}
+                className="hidden sm:inline-flex self-start items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors -mb-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                Back to search
+              </button>
+
+              {/* Mobile collapsed summary — sticky under the header. An explicit
+                  back arrow returns to the search screen (tapping the header
+                  logo also works, but that affordance is not discoverable);
+                  tapping the summary itself re-opens the form. */}
+              {!mobileFormExpanded && (
+                <div className="sm:hidden sticky top-16 z-30 -mx-4 px-2 py-2.5 bg-background border-b border-border flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setHasSearched(false)}
+                    aria-label="Back to search"
+                    className="shrink-0 w-9 h-9 -my-1 inline-flex items-center justify-center rounded-md text-foreground hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileFormExpanded(true)}
+                    aria-label="Edit search"
+                    className="flex-1 min-w-0 flex items-center justify-between gap-2 text-left"
+                  >
+                    <span className="flex items-center gap-1.5 min-w-0 text-sm font-medium text-foreground truncate">
+                      <span className="font-mono shrink-0">{summaryOrigin}</span>
+                      <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="truncate">{summaryDest}</span>
+                      {summaryDates && (
+                        <>
+                          <span className="text-muted-foreground shrink-0">·</span>
+                          <span className="text-muted-foreground font-mono text-xs shrink-0">{summaryDates}</span>
+                        </>
+                      )}
+                    </span>
+                    <span className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-link pr-2">
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {/* Full search form: always on desktop, on mobile only when expanded */}
+              <div className={mobileFormExpanded ? 'flex flex-col gap-3' : 'hidden sm:flex sm:flex-col sm:gap-3'}>
+                {mobileFormExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => setMobileFormExpanded(false)}
+                    className="sm:hidden self-end inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground -mb-1"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                    Collapse
+                  </button>
+                )}
+                <SearchBar
+                  initialOrigin={searchState.originCode}
+                  initialDest={searchState.destCity}
+                  initialDate={searchState.date}
+                  initialEndDate={searchState.endDate}
+                  initialDirection={searchState.direction}
+                  initialPassengers={adults}
+                  rawFlights={rawFlights}
+                  cabinClass={filters.cabinClass}
+                  onCabinChange={(val) => updateFilter('cabinClass', val)}
+                  onSearch={handleSearchSubmit}
+                  isSearching={resultsLoading}
+                />
+              </div>
+
+              {/* Search progress — sits directly under the form (Google Flights'
+                  thin sliding bar) so the pending state is visible on the
+                  collapsed mobile summary too, not only inside the form. */}
+              {resultsLoading && (
+                <SearchProgress originLabel={originLabel} destLabel={destLabel} />
+              )}
+
+              {/* 3. Persistent filter row (Google Flights-style). Always visible on
+                   the results screen; every control applies instantly. */}
+              <FilterBar
+                filters={filters}
+                uniqueAirlines={uniqueAirlines}
+                airlinePrices={airlinePrices}
+                medianCo2={medianCo2}
+                onFilterChange={updateFilter}
+                onReset={resetFilters}
+              />
+            </section>
+
+            {/* Layout: full-width Results Panel */}
+            <div className="flex flex-col gap-6 items-start">
+              {/* Results column */}
+              <section className="flex-1 w-full flex flex-col gap-4 overflow-hidden" aria-label="Flight Results">
+                {/* 4. Stats Summary Card Row */}
+                <StatsBar
+                  total={stats.total}
+                  cheapest={stats.cheapest}
+                  avgCo2={stats.avgCo2}
+                  loading={resultsLoading}
+                />
+
+                {/* 5. Sorting Controls */}
+                <SortBar
+                  sortType={sortType}
+                  onChange={updateSortType}
+                />
+
+                {/* Performance Warning if results are truncated for sorting */}
+                {!resultsLoading && totalFilteredCount > 5000 && (
+                  <div className="bg-transparent border border-accent-amber/40 text-accent-amber rounded-lg p-3 text-xs text-left font-medium flex items-start gap-2">
+                    <HelpCircle className="w-4 h-4 text-accent-amber shrink-0 mt-0.5" />
+                    <div>
+                      <p>Large search query (<span className="font-mono tabular-nums">{totalFilteredCount.toLocaleString()}</span> matches).</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        Showing and sorting the top 2,000 flights to ensure high performance and fluid scrolling.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 6. Results List (Virtualized) */}
+                {resultsLoading ? (
+                  <ResultsSkeleton isRoundTrip={isRoundTrip} />
+                ) : !hasResults ? (
+                  <div className="w-full bg-card border border-border rounded-lg p-12 text-center flex flex-col items-center justify-center gap-4 shadow-card min-h-[400px]">
+                    <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center border border-border">
+                      <Plane className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                    <div className="flex flex-col gap-1 max-w-sm">
+                      <h3 className="font-semibold text-foreground tracking-tight text-base">
+                        {isRoundTrip && legCounts.outbound > 0 && legCounts.return === 0
+                          ? 'No return flights match your criteria.'
+                          : isRoundTrip && legCounts.outbound === 0 && legCounts.return > 0
+                            ? 'No outbound flights match your criteria.'
+                            : 'No flights match your criteria.'}
+                      </h3>
+                      <p className="text-muted-foreground text-xs leading-relaxed">
+                        {isRoundTrip && legCounts.outbound > 0 && legCounts.return === 0
+                          ? `We found ${legCounts.outbound} outbound flight${legCounts.outbound === 1 ? '' : 's'} to ${destLabel}, but nothing back to ${originLabel} on your return date under the current filters.`
+                          : isRoundTrip && legCounts.outbound === 0 && legCounts.return > 0
+                            ? `We found ${legCounts.return} return flight${legCounts.return === 1 ? '' : 's'} from ${destLabel}, but nothing outbound from ${originLabel} on your departure date under the current filters.`
+                            : 'Try relaxing your price constraints, selecting alternative departure times, or resetting your filter checklist.'}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={resetFilters}
+                      variant="outline"
+                      className="font-medium border-border text-foreground hover:bg-secondary text-xs"
+                    >
+                      Clear Filters
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    ref={parentRef}
+                    className="h-[650px] overflow-y-auto w-full border border-border rounded-lg bg-secondary/60 p-2 scrollbar-thin scrollbar-thumb-neutral-200"
+                  >
+                    <div
+                      style={{
+                        height: `${rowVirtualizer.getTotalSize()}px`,
+                        width: '100%',
+                        position: 'relative',
+                      }}
+                    >
+                      {rowVirtualizer.getVirtualItems().map((virtualItem) => {
+                        const rowStyle: React.CSSProperties = {
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: `${virtualItem.size}px`,
+                          transform: `translateY(${virtualItem.start}px)`,
+                        };
+
+                        if (isRoundTrip) {
+                          const pair = roundTripPairs[virtualItem.index];
+                          if (!pair) return null;
+                          return (
+                            <RoundTripCard
+                              key={`${pair.out.flight_id}-${pair.ret.flight_id}`}
+                              outbound={pair.out}
+                              inbound={pair.ret}
+                              adults={adults}
+                              onSelect={handlePairSelect}
+                              style={rowStyle}
+                            />
+                          );
+                        }
+
+                        const flight = flights[virtualItem.index];
+                        if (!flight) return null;
+                        return (
+                          <FlightCard
+                            key={flight.flight_id}
+                            flight={flight}
+                            onSelect={handleFlightSelect}
+                            style={rowStyle}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* 7. Flight Details Popup (centered; shows both legs for round trips) */}
+      <FlightDetailModal
+        flights={selectedFlights}
+        adults={adults}
+        isOpen={selectedFlights !== null}
+        onClose={() => setSelectedFlights(null)}
+      />
+    </div>
+  );
+};

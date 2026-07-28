@@ -1,0 +1,96 @@
+/* ---------------------------------------------------------------------------
+   Geist design tokens — dark theme base
+   Reference: https://vercel.com/design.md (dark variant /design.dark.md)
+
+   Single source of truth for the app's design tokens. Values are the Geist
+   dark theme (near-black canvas, not pure black). The Tailwind v4 @theme
+   mapping that exposes these as utilities (bg-background, text-foreground,
+   font-mono, …) lives in index.css.
+
+   Dark is the BASE: values sit on :root because the app has no theme toggle.
+--------------------------------------------------------------------------- */
+
+:root {
+  /* Typography — Geist via @fontsource-variable (loaded in index.css).
+     Family names are the fontsource variable faces. */
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, monospace;
+  --font-heading: var(--font-sans);
+
+  /* Core surfaces & text (Geist dark, near-black) */
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --card: #111111;
+  --card-foreground: #ededed;
+  --popover: #111111;
+  --popover-foreground: #ededed;
+  --muted: #171717;
+  --muted-foreground: #a1a1a1;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+
+  /* Accents */
+  --accent-blue: #0072f5;   /* links, focus, primary actions */
+  --accent-green: #00c853;  /* low CO2, success */
+  --accent-amber: #f5a623;  /* warnings, filling fast */
+  --accent-red: #ff4d4f;    /* errors, delays */
+
+  /* shadcn semantic roles — remapped onto the dark Geist palette so existing
+     components keep rendering. Primary is a light chip on the dark canvas. */
+  --primary: #ededed;
+  --primary-foreground: #0a0a0a;
+  --secondary: #171717;
+  --secondary-foreground: #ededed;
+  --accent: #171717;
+  --accent-foreground: #ededed;
+  --destructive: var(--accent-red);
+  --ring: var(--accent-blue);
+
+  /* Semantic status/link tokens consumed by components (text-link, text-error,
+     bg-warning-soft, …). Rebased to the single dark accent palette — no stale
+     light-theme palette left to conflict. -soft = translucent tint that reads
+     on near-black; -deep = brighter accent for text/icons. */
+  /* Link TEXT uses a brighter step of the brand blue: accent-blue #0072f5 only
+     reaches 4.45:1 on the card surface (fails WCAG AA 4.5:1 for normal text),
+     so link text is lifted to #4c9dff (~7:1). The focus ring / primary blue
+     still use --accent-blue directly via --ring, so this is text-only. */
+  --link: #4c9dff;
+  --link-deep: #7cb7ff;
+  --link-soft: rgba(0, 114, 245, 0.14);
+  --warning: var(--accent-amber);
+  --warning-deep: #ffbf47;
+  --warning-soft: rgba(245, 166, 35, 0.14);
+  --error: var(--accent-red);
+  --error-deep: #ff7875;
+  --error-soft: rgba(255, 77, 79, 0.14);
+  --success: var(--accent-green);
+  --success-deep: #33d375;
+  --success-soft: rgba(0, 200, 83, 0.14);
+
+  /* Decorative chart accents (kept; already vivid on dark) */
+  --violet-brand: #7928ca;
+  --violet-soft: rgba(121, 40, 202, 0.16);
+  --violet-deep: #a066e0;
+  --cyan-brand: #50e3c2;
+  --cyan-soft: rgba(80, 227, 194, 0.16);
+  --cyan-deep: #50e3c2;
+
+  --chart-1: var(--accent-blue);
+  --chart-2: var(--violet-brand);
+  --chart-3: var(--accent-red);
+  --chart-4: var(--accent-amber);
+  --chart-5: var(--cyan-brand);
+
+  /* Sidebar (shadcn) */
+  --sidebar: #111111;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #ededed;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #171717;
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: var(--accent-blue);
+
+  /* Geometry */
+  --radius: 6px;
+}
