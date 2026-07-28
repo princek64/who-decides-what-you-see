@@ -92,3 +92,4 @@ npx tsx scripts/pipeline-test.mts
 
 Groq's free tier allows roughly two calls per minute at these prompt sizes, so the
 scripts back off on HTTP 429.
+# who-decides-what-you-see
