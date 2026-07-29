@@ -34,7 +34,7 @@ if (!apiKey) throw new Error('VITE_GROQ_API_KEY not found in .env');
 const groq = new Groq({ apiKey });
 
 // --- Load the CSV exactly as useChat does (cancelled excluded) ---
-const csvText = fs.readFileSync(path.join(import.meta.dirname, '../public/ux_research_flights_h2_2026_final.csv'), 'utf8');
+const csvText = fs.readFileSync(path.join(import.meta.dirname, '../../data/ux_research_flights_h2_2026_final.csv'), 'utf8');
 const flights: Flight[] = [];
 const co2: number[] = [];
 Papa.parse(csvText, {

@@ -139,7 +139,7 @@ export const FlightDetailModal: React.FC<FlightDetailModalProps> = ({ flight, is
               <div className="flex justify-between items-center gap-4 border-b border-border pb-2">
                 <span className="font-normal text-muted-foreground">Ticket Price:</span>
                 <span className="text-lg font-mono tabular-nums font-semibold text-foreground shrink-0">
-                  £{flight.price_gbp.toFixed(2)} <span className="text-[10px] text-muted-foreground font-medium">{flight.currency}</span>
+                  £{flight.price_gbp.toFixed(2)} <span className="text-[10px] text-muted-foreground font-medium">GBP</span>
                 </span>
               </div>
 

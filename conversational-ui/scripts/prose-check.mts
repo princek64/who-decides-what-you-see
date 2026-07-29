@@ -16,7 +16,7 @@ import type { Flight, IntentJSON } from '../src/hooks/useFlightFilter';
 import { buildProseAnswer, TABLE_MIN_RESULTS } from '../src/lib/prose';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const csvPath = path.resolve(here, '../public/ux_research_flights_h2_2026_final.csv');
+const csvPath = path.resolve(here, '../../data/ux_research_flights_h2_2026_final.csv');
 
 const parsed = Papa.parse(fs.readFileSync(csvPath, 'utf8'), {
   header: true,

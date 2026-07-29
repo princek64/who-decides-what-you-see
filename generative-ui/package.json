@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node -e \"require('fs').copyFileSync('../data/ux_research_flights_h2_2026_final.csv','public/ux_research_flights_h2_2026_final.csv')\"",
+    "prebuild": "node -e \"require('fs').copyFileSync('../data/flightlab-study-flights.json','public/flightlab-study-flights.json')\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

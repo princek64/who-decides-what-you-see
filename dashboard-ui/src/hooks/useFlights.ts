@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import Papa from 'papaparse';
 import { getCityName } from '../lib/airportMap';
 import { useSessionLogger } from './useSessionLogger';
 
@@ -23,7 +22,7 @@ export interface Flight {
   layover_details: string;
   cabin_class: string;
   price_gbp: number;
-  currency: string;
+  currency?: string;
   seats_remaining: number;
   baggage_policy: string;
   meal: string;
@@ -58,23 +57,6 @@ export interface FilterState {
 }
 
 export type SortType = 'cheapest' | 'fastest' | 'earliest' | 'latest';
-
-function parseTimeToMins(timeStr: string): number {
-  if (!timeStr) return 0;
-  const parts = timeStr.split(':');
-  if (parts.length < 2) return 0;
-  const hours = parseInt(parts[0], 10) || 0;
-  const mins = parseInt(parts[1], 10) || 0;
-  return hours * 60 + mins;
-}
-
-function calculateMedian(arr: number[]): number {
-  if (arr.length === 0) return 0;
-  const sorted = [...arr].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 // Cheapest fare per date for a route, feeding the price-calendar date picker.
 // Mirrors the route-matching rules used in filtering below (LON = any London
 // origin; return legs fly EU→London so origin/dest are swapped). Cancelled
@@ -148,59 +130,65 @@ export function useFlights() {
   // Load and parse CSV on mount
   useEffect(() => {
     setIsLoading(true);
-    Papa.parse('/ux_research_flights_h2_2026_final.csv', {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        const parsed: Flight[] = results.data.map((row: any) => {
-          const depTime = row.departure_time || '';
-          return {
-            flight_id: row.flight_id || '',
-            flight_number: row.flight_number || '',
-            origin_code: row.origin_code || '',
-            origin_terminal: row.origin_terminal || '',
-            dest_code: row.dest_code || '',
-            date: row.date || '',
-            departure_time: depTime,
-            arrival_time: row.arrival_time || '',
-            arrival_date: row.arrival_date || '',
-            duration_mins: parseInt(row.duration_mins, 10) || 0,
-            duration_formatted: row.duration_formatted || '',
-            direction: row.direction as 'outbound' | 'return',
-            airline_name: row.airline_name || '',
-            airline_tier: row.airline_tier || '',
-            aircraft_type: row.aircraft_type || '',
-            stops: parseInt(row.stops, 10) || 0,
-            layover_details: row.layover_details || '',
-            cabin_class: row.cabin_class || '',
-            price_gbp: parseFloat(row.price_gbp) || 0,
-            currency: row.currency || 'GBP',
-            seats_remaining: parseInt(row.seats_remaining, 10) || 0,
-            baggage_policy: row.baggage_policy || '',
-            meal: row.meal || '',
-            flexibility_policy: row.flexibility_policy || '',
-            co2_kg: parseFloat(row.co2_kg) || 0,
-            demand_indicator: row.demand_indicator || '',
-            flight_status: row.flight_status as Flight['flight_status'],
-            // Calculate helper numeric field
-            departure_mins_from_midnight: parseTimeToMins(depTime),
-          };
-        });
-
-        // Compute median CO2 of the entire dataset
-        const co2Values = parsed.map((f) => f.co2_kg).filter((v) => !isNaN(v));
-        const medianVal = calculateMedian(co2Values);
+    const startTime = performance.now();
+    let downloadTime = 0;
+    fetch('/flightlab-study-flights.json')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch dataset');
+        downloadTime = performance.now() - startTime;
+        return res.json();
+      })
+      .then((data) => {
+        const parseEndTime = performance.now();
         
-        setRawFlights(parsed);
-        setMedianCo2(medianVal);
+        // Build dynamic column map
+        const colMap = data.meta.columns.reduce((acc: Record<string, number>, name: string, index: number) => {
+          acc[name] = index;
+          return acc;
+        }, {});
+
+        // Map array rows to Flight objects
+        const flightsList: Flight[] = data.rows.map((row: any[]) => ({
+          flight_id: row[colMap.flight_id],
+          flight_number: row[colMap.flight_number],
+          origin_code: row[colMap.origin_code],
+          origin_terminal: row[colMap.origin_terminal],
+          dest_code: row[colMap.dest_code],
+          date: row[colMap.date],
+          departure_time: row[colMap.departure_time],
+          arrival_time: row[colMap.arrival_time],
+          arrival_date: row[colMap.arrival_date],
+          duration_mins: row[colMap.duration_mins],
+          duration_formatted: row[colMap.duration_formatted],
+          direction: row[colMap.direction],
+          airline_name: row[colMap.airline_name],
+          airline_tier: row[colMap.airline_tier],
+          aircraft_type: row[colMap.aircraft_type],
+          stops: row[colMap.stops],
+          layover_details: row[colMap.layover_details],
+          cabin_class: row[colMap.cabin_class],
+          price_gbp: row[colMap.price_gbp],
+          seats_remaining: row[colMap.seats_remaining],
+          baggage_policy: row[colMap.baggage_policy],
+          meal: row[colMap.meal],
+          flexibility_policy: row[colMap.flexibility_policy],
+          co2_kg: row[colMap.co2_kg],
+          demand_indicator: row[colMap.demand_indicator],
+          flight_status: row[colMap.flight_status],
+          departure_mins_from_midnight: row[colMap.departure_mins_from_midnight]
+        }));
+        
+        const mapEndTime = performance.now();
+        console.log(`[JSON Performance] Download time: ${downloadTime.toFixed(2)}ms, Parse time: ${(parseEndTime - startTime - downloadTime).toFixed(2)}ms, Map time: ${(mapEndTime - parseEndTime).toFixed(2)}ms, Total: ${(mapEndTime - startTime).toFixed(2)}ms`);
+        
+        setRawFlights(flightsList);
+        setMedianCo2(data.meta.medianCo2AllFlights);
         setIsLoading(false);
-      },
-      error: (err) => {
-        console.error('Error loading CSV:', err);
+      })
+      .catch((err) => {
+        console.error('Error loading JSON:', err);
         setIsLoading(false);
-      },
-    });
+      });
   }, []);
 
   // Filter setters that wrap session logging

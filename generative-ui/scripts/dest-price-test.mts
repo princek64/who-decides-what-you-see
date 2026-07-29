@@ -9,7 +9,7 @@ import { filterAndSortFlights } from '../src/hooks/useFlightFilter';
 import type { Flight, IntentJSON } from '../src/hooks/useFlightFilter';
 import { summarizeDestinations } from '../src/lib/layoutData';
 
-const csvText = fs.readFileSync(path.join(import.meta.dirname, '../public/ux_research_flights_h2_2026_final.csv'), 'utf8');
+const csvText = fs.readFileSync(path.join(import.meta.dirname, '../../data/ux_research_flights_h2_2026_final.csv'), 'utf8');
 const flights: Flight[] = [];
 const co2: number[] = [];
 Papa.parse(csvText, {

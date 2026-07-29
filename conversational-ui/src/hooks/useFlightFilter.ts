@@ -21,7 +21,7 @@ export interface Flight {
   layover_details: string;
   cabin_class: 'Economy' | 'Premium Economy' | 'Business' | string;
   price_gbp: number;
-  currency: string;
+  currency?: string;
   seats_remaining: number;
   baggage_policy: string;
   meal: string;
