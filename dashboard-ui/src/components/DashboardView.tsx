@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useFlights, DEFAULT_FILTERS } from '../hooks/useFlights';
-import type { Flight, FilterState } from '../hooks/useFlights';
+import type { Flight, FilterState, SearchState } from '../hooks/useFlights';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { SearchBar } from './SearchBar';
 import { FilterBar } from './FilterBar';
@@ -31,6 +31,17 @@ const SEARCH_LOADING_MS = 800;
 // not feedback — so the loader waits for a pause in filter activity, the same
 // debounce-before-you-search pattern as a live-typed search box.
 const FILTER_LOADING_DEBOUNCE_MS = 400;
+
+// Mirrors useFlights' own initial searchState — reapplied when the user backs
+// out to the search screen, so stale origin/destination/dates from the last
+// search don't linger on a form that reads as "fresh".
+const DEFAULT_SEARCH_STATE: SearchState = {
+  originCode: 'LON',
+  destCity: '',
+  date: '',
+  endDate: '',
+  direction: 'return',
+};
 
 export const DashboardView: React.FC = () => {
   const {
@@ -124,6 +135,20 @@ export const DashboardView: React.FC = () => {
     resetFilters();
     beginResultsLoading();
   }, [resetFilters, beginResultsLoading]);
+
+  // "Back to search" (header logo or the explicit link/arrow) — clears the
+  // form back to its defaults rather than leaving the last search's origin/
+  // destination/dates sitting there, so the form the user lands on actually
+  // reads as a new search.
+  const handleBackToSearch = React.useCallback(() => {
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    updateSearch(DEFAULT_SEARCH_STATE);
+    pendingFiltersRef.current = DEFAULT_FILTERS;
+    setDraftFilters(DEFAULT_FILTERS);
+    setAdults(1);
+    setHasSearched(false);
+    setMobileFormExpanded(false);
+  }, [updateSearch]);
 
   const exampleSearches = [
     { label: 'London to Barcelona', originCode: 'LON', destCity: 'Barcelona', date: '2026-07-20', direction: 'outbound' as const },
@@ -348,7 +373,7 @@ export const DashboardView: React.FC = () => {
       <header className="sticky top-0 z-40 bg-background border-b border-border h-16 px-4 md:px-8 flex justify-between items-center select-none">
         <button
           type="button"
-          onClick={() => hasSearched && setHasSearched(false)}
+          onClick={() => hasSearched && handleBackToSearch()}
           disabled={!hasSearched}
           aria-label={hasSearched ? 'Back to search' : 'Flight Dashboard'}
           className={`flex items-center gap-2.5 text-left rounded-md -mx-1 px-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${hasSearched ? 'hover:bg-secondary cursor-pointer' : 'cursor-default'}`}
@@ -443,7 +468,7 @@ export const DashboardView: React.FC = () => {
               {/* Desktop back-to-hero link (mobile uses the header logo for this) */}
               <button
                 type="button"
-                onClick={() => setHasSearched(false)}
+                onClick={handleBackToSearch}
                 className="hidden sm:inline-flex self-start items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors -mb-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
@@ -458,7 +483,7 @@ export const DashboardView: React.FC = () => {
                 <div className="sm:hidden sticky top-16 z-30 -mx-4 px-2 py-2.5 bg-background border-b border-border flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setHasSearched(false)}
+                    onClick={handleBackToSearch}
                     aria-label="Back to search"
                     className="shrink-0 w-9 h-9 -my-1 inline-flex items-center justify-center rounded-md text-foreground hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
