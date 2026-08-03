@@ -125,7 +125,7 @@ export function useFlights() {
   });
 
   // Sort criteria
-  const [sortType, setSortType] = useState<SortType>('cheapest');
+  const [sortType, setSortType] = useState<SortType>('fastest');
 
   // Load and parse CSV on mount
   useEffect(() => {
