@@ -3,6 +3,7 @@ import type { Flight, IntentJSON } from '../hooks/useFlightFilter';
 import { formatFlightDate } from '../lib/utils';
 import { buildProseAnswer, TABLE_MAX_ROWS } from '../lib/prose';
 import type { ProseBlock, ProseNode } from '../lib/prose';
+import { getCityName } from '../lib/airportMap';
 
 interface FlightProseProps {
   flights: Flight[];
@@ -13,15 +14,6 @@ interface FlightProseProps {
   keepStops?: boolean;
 }
 
-/**
- * The assistant's answer as prose inside the chat thread: sentences first, and
- * a plain inline table only when there are too many results to say out loud.
- * No cards, no price badges, no CO2 or demand indicators — those live in the
- * dashboard app.
- *
- * Nothing here is clickable: the answer says everything it has to say, so a
- * flight name and a table row are text, not controls.
- */
 export const FlightProse: React.FC<FlightProseProps> = ({
   flights,
   intent,
@@ -38,8 +30,6 @@ export const FlightProse: React.FC<FlightProseProps> = ({
 
   const cell = 'py-2 pr-5 whitespace-nowrap align-middle';
 
-  // Text runs and bold runs. A flight mention is bold text like any other
-  // emphasis — there is no detail dialog behind it.
   const renderNodes = (nodes: ProseNode[]) =>
     nodes.map((node, i) =>
       node.type === 'text' ? (
@@ -103,9 +93,11 @@ export const FlightProse: React.FC<FlightProseProps> = ({
                     {f.departure_time}{' '}
                     <span className="text-muted-foreground">{f.origin_code}</span>
                   </td>
-                  <td className={`${cell} font-mono tabular-nums`}>
-                    {f.arrival_time}{' '}
-                    <span className="text-muted-foreground">{f.dest_code}</span>
+                  <td className={cell}>
+                    <span className="font-mono tabular-nums">{f.arrival_time}</span>{' '}
+                    <span className="text-muted-foreground">
+                      {getCityName(f.dest_code)} ({f.dest_code})
+                    </span>
                   </td>
                   <td className={`${cell} font-mono tabular-nums text-muted-foreground`}>
                     {f.duration_formatted}

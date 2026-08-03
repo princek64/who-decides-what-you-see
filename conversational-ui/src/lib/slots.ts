@@ -21,28 +21,11 @@ export interface SlotJSON {
   flexibility?: string | null;
   low_co2?: boolean | null;
   off_topic?: boolean;
-  /** Open-ended "where could I go" exploration: the user wants destination
-   *  SUGGESTIONS, so destination (and dates) must NOT be asked for — the search
-   *  runs across every reachable city. Mirrors dashboard-ui's empty-destination
-   *  "anywhere" search and generative-ui's map/destinations layouts. */
+  
   anywhere?: boolean;
-  /** Direct-vs-connecting comparison ("compare direct vs connecting, which
-   *  would you choose?"): the summary states the price/time tradeoff and a
-   *  recommendation, mirroring generative-ui's comparison template. Set by a
-   *  deterministic backstop from the user's wording. */
   compare?: boolean;
-  /** "Cheapest weekend / cheapest day / best time to go" queries: the summary
-   *  states the single cheapest day (with weekday) explicitly instead of only
-   *  returning a sorted list. Set by a deterministic backstop. */
   cheapest_when?: boolean;
-  /** The user asked specifically about a WEEKEND, so a cheapest_when summary is
-   *  restricted to Saturday/Sunday departures. Set by a deterministic backstop. */
   weekend?: boolean;
-  /** A question ABOUT a flight already on screen ("what's the baggage
-   *  allowance for the cheapest one?") rather than a new search: which field
-   *  of the dataset to read, and which flight to read it from. Answered by
-   *  src/lib/detailAnswers.ts, never by a search. Like compare/cheapest_when
-   *  these describe THIS message, so they are never carried between turns. */
   detail_field?: string | null;
   detail_target?: string | null;
 }
@@ -111,10 +94,6 @@ export const SLOT_QUESTIONS: Record<'destination' | 'dates', string> = {
   dates: 'Which dates?',
 };
 
-// ─── Deterministic wording backstops ──────────────────────────────────────
-// The 8B model flags these inconsistently, so they are decided from the user's
-// own words instead. They live here (rather than inline in useChat) so the app
-// and scripts/pipeline-test.mts share ONE implementation and cannot drift.
 
 // Open-ended "where could I go" exploration.
 export const isAnywhereQuery = (text: string): boolean =>
@@ -130,28 +109,20 @@ export const isCompareQuery = (text: string): boolean =>
   /\b(?:connect|stop|indirect)\w*\b.*\b(?:vs\.?|versus|or)\b.*\bdirect\b/i.test(text) ||
   /\bdirect (?:vs\.?|or) (?:a )?(?:stop|connecting)/i.test(text);
 
-// "Cheapest weekend / cheapest day / best time to go" — the answer is a
-// specific day, which should be stated, not left for the user to eyeball.
+// "Cheapest weekend / cheapest day / best time to go"
 export const isCheapestWhenQuery = (text: string): boolean =>
   /\bcheapest\b.*\b(?:day|weekend|date|time|to (?:go|fly|travel))\b/i.test(text) ||
   /\bbest (?:time|day|weekend|date)\b.*\b(?:to (?:go|fly|travel)|for)\b/i.test(text) ||
   /\bwhen(?:'s| is)?\b.*\bcheapest\b/i.test(text);
 
-// "narrow it to direct flights only" / "only direct please" — the assistant
-// OFFERS this in its closing follow-up question, so the answer to it has to
-// land. Deliberately narrow: a bare "direct" (as in "direct vs connecting")
-// must not trip it.
+// "Show me only direct flights"
 export const isDirectOnlyQuery = (text: string): boolean =>
   /\b(?:only|just)\s+(?:show\s+|see\s+|give\s+me\s+)?(?:me\s+)?(?:the\s+)?direct\b/i.test(text) ||
   /\bdirect\s+(?:flights?\s+)?only\b/i.test(text) ||
   /\bnarrow(?:\s+it)?\s+to\s+direct\b/i.test(text) ||
   /\bnon[- ]?stop\s+only\b/i.test(text);
 
-// "include flights with a stop" / "allow a stop" — the opposite offer. This one
-// asks to REMOVE the direct-only constraint, which is not the same as
-// direct_only:false (that means "only flights WITH a stop" — see slotToIntent,
-// unchanged). It is handled in resolveTurnSlot, which stops carrying the
-// previous turn's direct_only forward.
+// "include flights with a stop" / "allow a stop"
 export const isDropDirectQuery = (text: string): boolean =>
   /\b(?:include|allow|add|also show|consider|open up to|open it up to)\b[^.?!]{0,40}\b(?:stop|stops|stopover|stopovers|connecting|indirect)\b/i.test(text) ||
   /\b(?:don'?t|do not|no longer)\s+(?:keep|make|need)\s+(?:it\s+)?direct\b/i.test(text) ||
@@ -160,29 +131,21 @@ export const isDropDirectQuery = (text: string): boolean =>
 // "show the lower-CO₂ options" — the third standing offer. The 8B model sets
 // low_co2 only about half the time when CO₂ is written as a symbol.
 export const isLowCo2Query = (text: string): boolean =>
-  // No trailing \b after the alternatives: "₂" is not a word character, so
-  // "lower-CO₂" would never match one.
   /\b(?:low|lower|lowest|less|least|reduce|reduced|greener?|eco)\w*[\s-]*(?:co2\b|co₂|carbon\b|emissions?\b|footprint\b)/i.test(text);
 
-// Applied to every freshly parsed slot, before any gate runs. Mutates and
-// returns the same object.
 export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON => {
-  // "Anywhere" exploration is a destination-suggestion request, not a gap to
-  // fill — but only when they did NOT name a destination.
+  // "Anywhere" exploration is a destination-suggestion request
   if (!slot.anywhere && !String(slot.destination ?? '').trim() && isAnywhereQuery(text)) {
     slot.anywhere = true;
   }
-  // The converse also matters: the model sets anywhere on bare constraints like
-  // "under 25", which turned a Rome follow-up into a 3,746-flight search across
-  // the whole network. An anywhere search must be supported by the wording.
+  
   if (slot.anywhere && !isAnywhereQuery(text)) {
     slot.anywhere = false;
   }
   if (isCompareQuery(text)) slot.compare = true;
   if (isCheapestWhenQuery(text)) slot.cheapest_when = true;
   if (/\bweekend\b/i.test(text)) slot.weekend = true;
-  // Answers to the closing follow-up question. Only ever FILL a slot the model
-  // left empty — an explicit model value still wins.
+
   if (slot.direct_only == null && !isCompareQuery(text) && isDirectOnlyQuery(text)) {
     slot.direct_only = true;
   }
@@ -190,21 +153,6 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
   return slot;
 };
 
-// ─── Multi-turn slot carryover ────────────────────────────────────────────
-// Every message is parsed by the LLM on its OWN words (no conversational
-// history — that is what leaked "departing after 6pm" from an Amsterdam turn
-// onto a Rome comparison). Continuity is then restored HERE, deterministically:
-// a message that modifies the current query inherits the slots it did not
-// mention; a message that stands on its own as a new query inherits nothing.
-//
-// Withholding history alone over-corrected: "find a flight for 4th august
-// instead" dropped Rome and asked for a destination again, and "under 25"
-// dropped it too and returned 3,746 flights across every city.
-
-// Slots that describe the SEARCH and therefore survive a modifying turn.
-// `compare` / `cheapest_when` / `off_topic` are deliberately absent: they
-// describe THIS message's wording and are re-derived every turn by
-// applyWordingBackstops. `missing` is recomputed by the caller.
 const CARRYABLE_SLOTS = [
   'destination',
   'date_from',
@@ -222,59 +170,37 @@ const CARRYABLE_SLOTS = [
   'weekend',
 ] as const;
 
-// Phrases that mark the message as an edit to the query already on screen.
 const MODIFIER_CUE =
-  /\b(?:instead|same date|same day|same dates|same time|that date|those dates|make it|change (?:it|that) to|what about|how about|and also|as well|rather than|but)\b/i;
+  /\b(?:instead|same date|same day|same dates|same time|same budget|same price|same cap|that date|those dates|make it|change (?:it|that) to|what about|how about|and also|as well|rather than|but)\b/i;
 
 // Explicit "throw away the current search" phrases.
 const RESET_CUE = /\b(?:start over|start again|new search|forget (?:that|it|the)|reset|never ?mind)\b/i;
 
-// "for sevilla for SAME DATE?" — the model does not know what the current date
-// is, and fills the slot with today. The user's own words say otherwise, so the
-// carried dates must WIN over the model's guess for these phrasings.
 const SAME_DATE_CUE = /\bsame (?:date|day|dates|time)\b/i;
 
 const hasValue = (v: unknown): boolean =>
   v !== null && v !== undefined && !(typeof v === 'string' && !v.trim());
 
-/**
- * Resolve the slot to search with, given the previous turn's slot and the
- * freshly parsed one. `prev` is the slot of the last assistant turn that had
- * one (a results turn, a slot question, or an unknown-city reply); pass null on
- * the first message of a conversation.
- *
- * Rules, in order:
- *   1. No previous slot, an explicit reset phrase, or an "anywhere" exploration
- *      -> use the new slot untouched (single-turn behaviour, unchanged).
- *   2. The message stands alone as a complete query — it names BOTH a
- *      destination and dates — and carries no modifier cue -> new slot
- *      untouched. This is what keeps a fresh "Compare … to Rome on 31 July"
- *      from inheriting an earlier turn's price cap or departure window.
- *   3. Otherwise it is MODIFYING the current query: carry forward every
- *      carryable slot the new message left empty.
- */
 export const resolveTurnSlot = (
   prev: SlotJSON | null | undefined,
   next: SlotJSON,
   text: string
 ): SlotJSON => {
-  // `anywhere` is honoured only when the wording supports it — the model raises
-  // it on bare constraints ("under 25"), which would silently discard the
-  // destination the user is still talking about.
   const wantsAnywhere = Boolean(next.anywhere) && isAnywhereQuery(text);
   if (!prev || RESET_CUE.test(text) || wantsAnywhere || next.off_topic) return next;
 
   const hasDestination = hasValue(next.destination);
   const hasDates = hasValue(next.date_from) || hasValue(next.date_to);
   const isModifier = MODIFIER_CUE.test(text);
-  if (hasDestination && hasDates && !isModifier) return next;
+
+  const prevDest = hasValue(prev.destination) ? String(prev.destination).trim().toLowerCase() : null;
+  const nextDest = hasValue(next.destination) ? String(next.destination).trim().toLowerCase() : null;
+  const sameDestination = prevDest !== null && nextDest !== null && prevDest === nextDest;
+  const destinationIntroduced = hasDestination && !sameDestination;
+
+  if ((destinationIntroduced && !isModifier) || (hasDestination && hasDates && !isModifier)) return next;
 
   const merged: SlotJSON = { ...next, anywhere: false };
-  // "include flights with a stop" answers the assistant's own follow-up offer.
-  // It names no slot value the model can fill (dropping a constraint is not
-  // direct_only:false — that means "only flights WITH a stop"), so without this
-  // the empty slot is refilled from the previous turn and the search returns a
-  // byte-identical answer.
   const dropsDirect = isDropDirectQuery(text);
   for (const key of CARRYABLE_SLOTS) {
     if (key === 'direct_only' && dropsDirect) continue;
@@ -283,14 +209,10 @@ export const resolveTurnSlot = (
     }
   }
   if (dropsDirect && next.direct_only == null) merged.direct_only = null;
-  // "same date" beats a date the model invented for a message that never
-  // named one.
   if (SAME_DATE_CUE.test(text) && (hasValue(prev.date_from) || hasValue(prev.date_to))) {
     merged.date_from = prev.date_from;
     merged.date_to = prev.date_to;
   }
-  // `missing` is recomputed from the merged slots by firstMissingRequiredSlot,
-  // but keep the array honest for the research log.
   merged.missing = [
     ...(hasValue(merged.destination) ? [] : ['destination']),
     ...(hasValue(merged.date_from) || hasValue(merged.date_to) ? [] : ['dates']),
@@ -299,7 +221,6 @@ export const resolveTurnSlot = (
 };
 
 // Map the LLM's slot object onto the existing IntentJSON the filter consumes.
-// Filtering semantics are unchanged — this is purely a translation layer.
 export const slotToIntent = (slot: SlotJSON): IntentJSON => {
   const intent: IntentJSON = { direction: 'outbound' };
 
@@ -323,9 +244,6 @@ export const slotToIntent = (slot: SlotJSON): IntentJSON => {
   if (slot.airline && slot.airline.trim()) intent.airline = slot.airline.trim();
   if (slot.flexibility && slot.flexibility.trim()) intent.flexibility = slot.flexibility.trim();
   if (slot.low_co2) intent.low_co2 = true;
-  // "weekend" is a real constraint on the result set, not just a hint for the
-  // summary sentence. Without this it was silently dropped on any query that
-  // was not a cheapest-day question (e.g. "£150 and a free weekend").
   if (slot.weekend) intent.weekend_only = true;
 
   return intent;
