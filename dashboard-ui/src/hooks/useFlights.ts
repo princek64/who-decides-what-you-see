@@ -56,6 +56,19 @@ export interface FilterState {
   includeCancelled: boolean;
 }
 
+export const DEFAULT_FILTERS: FilterState = {
+  priceRange: [0, 1500],
+  stops: 'all',
+  cabinClass: 'Economy',
+  airlines: [],
+  departureTime: 'all',
+  flexibility: 'all',
+  lowCo2Only: false,
+  demandIndicator: 'all',
+  flightStatus: 'all',
+  includeCancelled: false,
+};
+
 export type SortType = 'cheapest' | 'fastest' | 'earliest' | 'latest';
 // Cheapest fare per date for a route, feeding the price-calendar date picker.
 // Mirrors the route-matching rules used in filtering below (LON = any London
@@ -111,21 +124,10 @@ export function useFlights() {
   // Active filters (applied in real-time). Cabin class defaults to Economy,
   // matching the Google Flights reference (the header cabin dropdown is the
   // single control for this filter).
-  const [filters, setFilters] = useState<FilterState>({
-    priceRange: [0, 1500],
-    stops: 'all',
-    cabinClass: 'Economy',
-    airlines: [],
-    departureTime: 'all',
-    flexibility: 'all',
-    lowCo2Only: false,
-    demandIndicator: 'all',
-    flightStatus: 'all',
-    includeCancelled: false,
-  });
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
   // Sort criteria
-  const [sortType, setSortType] = useState<SortType>('cheapest');
+  const [sortType, setSortType] = useState<SortType>('fastest');
 
   // Load and parse CSV on mount
   useEffect(() => {
@@ -208,20 +210,13 @@ export function useFlights() {
     logFilterChange(key, value);
   };
 
+  // Commits a full filter object without logging (caller already logged the interaction).
+  const applyFilters = (newFilters: FilterState) => {
+    setFilters(newFilters);
+  };
+
   const resetFilters = () => {
-    const resetValues: FilterState = {
-      priceRange: [0, 1500],
-      stops: 'all',
-      cabinClass: 'Economy',
-      airlines: [],
-      departureTime: 'all',
-      flexibility: 'all',
-      lowCo2Only: false,
-      demandIndicator: 'all',
-      flightStatus: 'all',
-      includeCancelled: false,
-    };
-    setFilters(resetValues);
+    setFilters(DEFAULT_FILTERS);
     logFilterChange('reset_filters', 'all');
   };
 
@@ -453,6 +448,7 @@ export function useFlights() {
     stats,
     updateSearch,
     updateFilter,
+    applyFilters,
     resetFilters,
     updateSortType,
   };

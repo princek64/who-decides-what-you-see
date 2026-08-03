@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useFlights } from '../hooks/useFlights';
-import type { Flight } from '../hooks/useFlights';
+import { useFlights, DEFAULT_FILTERS } from '../hooks/useFlights';
+import type { Flight, FilterState, SearchState } from '../hooks/useFlights';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { SearchBar } from './SearchBar';
 import { FilterBar } from './FilterBar';
@@ -16,6 +16,7 @@ import { RoundTripCard } from './RoundTripCard';
 import { ResultsSkeleton } from './ResultsSkeleton';
 import { SearchProgress } from './SearchProgress';
 import { getCityName } from '../lib/airportMap';
+import { DestinationGrid } from './DestinationGrid';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 // How long the search-pending state is held. Filtering is synchronous, so this
@@ -24,6 +25,18 @@ import { useIsMobile } from '../hooks/useIsMobile';
 // a search. Long enough to register the progress bar and skeleton, short enough
 // not to add meaningful time to a participant's task.
 const SEARCH_LOADING_MS = 800;
+
+// Debounce before the filter loader shows, so rapid changes don't flicker it.
+const FILTER_LOADING_DEBOUNCE_MS = 400;
+
+// Defaults reapplied when the user backs out to the search screen.
+const DEFAULT_SEARCH_STATE: SearchState = {
+  originCode: 'LON',
+  destCity: '',
+  date: '',
+  endDate: '',
+  direction: 'return',
+};
 
 export const DashboardView: React.FC = () => {
   const {
@@ -40,11 +53,12 @@ export const DashboardView: React.FC = () => {
     stats,
     updateSearch,
     updateFilter,
+    applyFilters,
     resetFilters,
     updateSortType,
   } = useFlights();
 
-  const { logCardClick, logDetailView } = useSessionLogger();
+  const { logCardClick, logDetailView, logFilterChange } = useSessionLogger();
   const isMobile = useIsMobile();
   // One flight (one-way) or [outbound, return] shown in the detail popup
   const [selectedFlights, setSelectedFlights] = useState<Flight[] | null>(null);
@@ -70,11 +84,53 @@ export const DashboardView: React.FC = () => {
     loadingTimerRef.current = setTimeout(() => setResultsLoading(false), SEARCH_LOADING_MS);
   }, []);
 
+  const filterDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // draftFilters drives the controls instantly; filters (committed) only updates once the loader is up.
+  const [draftFilters, setDraftFilters] = useState<FilterState>(filters);
+  const pendingFiltersRef = React.useRef<FilterState>(filters);
+
   React.useEffect(() => {
     return () => {
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
   }, []);
+
+  // Debounced loader; filters commit in the same tick it shows, so new data is always hidden until it's done.
+  const handleFilterChange = React.useCallback(
+    <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
+      const next = { ...pendingFiltersRef.current, [key]: value };
+      pendingFiltersRef.current = next;
+      setDraftFilters(next);
+      logFilterChange(key, value);
+      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+      filterDebounceRef.current = setTimeout(() => {
+        applyFilters(pendingFiltersRef.current);
+        beginResultsLoading();
+      }, FILTER_LOADING_DEBOUNCE_MS);
+    },
+    [applyFilters, beginResultsLoading, logFilterChange]
+  );
+
+  const handleFilterReset = React.useCallback(() => {
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    pendingFiltersRef.current = DEFAULT_FILTERS;
+    setDraftFilters(DEFAULT_FILTERS);
+    resetFilters();
+    beginResultsLoading();
+  }, [resetFilters, beginResultsLoading]);
+
+  // Resets the search form to defaults when backing out to the search screen.
+  const handleBackToSearch = React.useCallback(() => {
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    updateSearch(DEFAULT_SEARCH_STATE);
+    pendingFiltersRef.current = DEFAULT_FILTERS;
+    setDraftFilters(DEFAULT_FILTERS);
+    setAdults(1);
+    setHasSearched(false);
+    setMobileFormExpanded(false);
+  }, [updateSearch]);
 
   const exampleSearches = [
     { label: 'London to Barcelona', originCode: 'LON', destCity: 'Barcelona', date: '2026-07-20', direction: 'outbound' as const },
@@ -84,6 +140,11 @@ export const DashboardView: React.FC = () => {
 
   const handleSearchSubmit = (newSearch: { originCode: string; destCity: string; date: string; endDate?: string; direction: 'outbound' | 'return'; passengers: number }) => {
     setAdults(newSearch.passengers);
+    // A new search resets stale filters and drops any pending filter debounce.
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    pendingFiltersRef.current = DEFAULT_FILTERS;
+    setDraftFilters(DEFAULT_FILTERS);
+    resetFilters();
     updateSearch({
       originCode: newSearch.originCode,
       destCity: newSearch.destCity,
@@ -106,6 +167,10 @@ export const DashboardView: React.FC = () => {
       endDate: example.endDate || '2026-07-27',
       direction: example.direction,
     };
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    pendingFiltersRef.current = DEFAULT_FILTERS;
+    setDraftFilters(DEFAULT_FILTERS);
+    resetFilters();
     updateSearch(newSearch);
     setHasSearched(true);
     setMobileFormExpanded(false);
@@ -150,6 +215,9 @@ export const DashboardView: React.FC = () => {
       // Both lists inherit the active sort order, so the first few return
       // candidates are the best ones under the current criterion.
       for (const ret of candidates.slice(0, PAIR_RETURNS_PER_OUTBOUND)) {
+        // Filter by the combined leg total, not each leg individually, since that's what's shown.
+        const total = out.price_gbp + ret.price_gbp;
+        if (total < filters.priceRange[0] || total > filters.priceRange[1]) continue;
         pairs.push({ out, ret });
       }
     }
@@ -164,10 +232,46 @@ export const DashboardView: React.FC = () => {
     };
     pairs.sort((a, b) => rank(a) - rank(b));
     return pairs.slice(0, PAIR_RESULT_CAP);
-  }, [flights, isRoundTrip, sortType]);
+  }, [flights, isRoundTrip, sortType, filters.priceRange]);
 
   const resultCount = isRoundTrip ? roundTripPairs.length : flights.length;
   const hasResults = resultCount > 0;
+
+  // Groups results by destination city for an anywhere (no-destination) search.
+  const destinationGroups = React.useMemo(() => {
+    if (searchState.destCity) return [];
+    const map = new Map<string, { code: string; city: string; count: number; cheapest: number }>();
+    if (isRoundTrip) {
+      for (const { out, ret } of roundTripPairs) {
+        const total = out.price_gbp + ret.price_gbp;
+        const entry = map.get(out.dest_code);
+        if (entry) {
+          entry.count++;
+          if (total < entry.cheapest) entry.cheapest = total;
+        } else {
+          map.set(out.dest_code, { code: out.dest_code, city: getCityName(out.dest_code), count: 1, cheapest: total });
+        }
+      }
+    } else {
+      for (const f of flights) {
+        if (f.direction !== 'outbound') continue;
+        const entry = map.get(f.dest_code);
+        if (entry) {
+          entry.count++;
+          if (f.price_gbp < entry.cheapest) entry.cheapest = f.price_gbp;
+        } else {
+          map.set(f.dest_code, { code: f.dest_code, city: getCityName(f.dest_code), count: 1, cheapest: f.price_gbp });
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.cheapest - b.cheapest);
+  }, [searchState.destCity, isRoundTrip, roundTripPairs, flights]);
+  const showDestinationGrid = !searchState.destCity && destinationGroups.length > 0;
+
+  const handleDestinationSelect = (city: string) => {
+    updateSearch({ ...searchState, destCity: city });
+    beginResultsLoading();
+  };
 
   const originLabel = searchState.originCode === 'LON' ? 'London' : getCityName(searchState.originCode);
   const destLabel = searchState.destCity
@@ -242,7 +346,7 @@ export const DashboardView: React.FC = () => {
       <header className="sticky top-0 z-40 bg-background border-b border-border h-16 px-4 md:px-8 flex justify-between items-center select-none">
         <button
           type="button"
-          onClick={() => hasSearched && setHasSearched(false)}
+          onClick={() => hasSearched && handleBackToSearch()}
           disabled={!hasSearched}
           aria-label={hasSearched ? 'Back to search' : 'Flight Dashboard'}
           className={`flex items-center gap-2.5 text-left rounded-md -mx-1 px-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${hasSearched ? 'hover:bg-secondary cursor-pointer' : 'cursor-default'}`}
@@ -337,7 +441,7 @@ export const DashboardView: React.FC = () => {
               {/* Desktop back-to-hero link (mobile uses the header logo for this) */}
               <button
                 type="button"
-                onClick={() => setHasSearched(false)}
+                onClick={handleBackToSearch}
                 className="hidden sm:inline-flex self-start items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors -mb-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
@@ -352,7 +456,7 @@ export const DashboardView: React.FC = () => {
                 <div className="sm:hidden sticky top-16 z-30 -mx-4 px-2 py-2.5 bg-background border-b border-border flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setHasSearched(false)}
+                    onClick={handleBackToSearch}
                     aria-label="Back to search"
                     className="shrink-0 w-9 h-9 -my-1 inline-flex items-center justify-center rounded-md text-foreground hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
@@ -403,8 +507,8 @@ export const DashboardView: React.FC = () => {
                   initialDirection={searchState.direction}
                   initialPassengers={adults}
                   rawFlights={rawFlights}
-                  cabinClass={filters.cabinClass}
-                  onCabinChange={(val) => updateFilter('cabinClass', val)}
+                  cabinClass={draftFilters.cabinClass}
+                  onCabinChange={(val) => handleFilterChange('cabinClass', val)}
                   onSearch={handleSearchSubmit}
                   isSearching={resultsLoading}
                 />
@@ -420,12 +524,12 @@ export const DashboardView: React.FC = () => {
               {/* 3. Persistent filter row (Google Flights-style). Always visible on
                    the results screen; every control applies instantly. */}
               <FilterBar
-                filters={filters}
+                filters={draftFilters}
                 uniqueAirlines={uniqueAirlines}
                 airlinePrices={airlinePrices}
                 medianCo2={medianCo2}
-                onFilterChange={updateFilter}
-                onReset={resetFilters}
+                onFilterChange={handleFilterChange}
+                onReset={handleFilterReset}
               />
             </section>
 
@@ -441,14 +545,16 @@ export const DashboardView: React.FC = () => {
                   loading={resultsLoading}
                 />
 
-                {/* 5. Sorting Controls */}
-                <SortBar
-                  sortType={sortType}
-                  onChange={updateSortType}
-                />
+                {/* 5. Sorting Controls — hidden over the destination grid (always cheapest-first) */}
+                {!showDestinationGrid && (
+                  <SortBar
+                    sortType={sortType}
+                    onChange={updateSortType}
+                  />
+                )}
 
                 {/* Performance Warning if results are truncated for sorting */}
-                {!resultsLoading && totalFilteredCount > 5000 && (
+                {!resultsLoading && !showDestinationGrid && totalFilteredCount > 5000 && (
                   <div className="bg-transparent border border-accent-amber/40 text-accent-amber rounded-lg p-3 text-xs text-left font-medium flex items-start gap-2">
                     <HelpCircle className="w-4 h-4 text-accent-amber shrink-0 mt-0.5" />
                     <div>
@@ -460,9 +566,20 @@ export const DashboardView: React.FC = () => {
                   </div>
                 )}
 
-                {/* 6. Results List (Virtualized) */}
+                {/* 6. Results: destination grid if no destination is picked, flight list otherwise */}
                 {resultsLoading ? (
                   <ResultsSkeleton isRoundTrip={isRoundTrip} />
+                ) : showDestinationGrid ? (
+                  <div className="flex flex-col gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      No destination picked — showing <span className="font-mono tabular-nums">{destinationGroups.length.toLocaleString()}</span> destinations from {originLabel}. Pick one to see flights.
+                    </p>
+                    <DestinationGrid
+                      destinations={destinationGroups}
+                      isRoundTrip={isRoundTrip}
+                      onSelect={handleDestinationSelect}
+                    />
+                  </div>
                 ) : !hasResults ? (
                   <div className="w-full bg-card border border-border rounded-lg p-12 text-center flex flex-col items-center justify-center gap-4 shadow-card min-h-[400px]">
                     <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center border border-border">
@@ -485,7 +602,7 @@ export const DashboardView: React.FC = () => {
                       </p>
                     </div>
                     <Button
-                      onClick={resetFilters}
+                      onClick={handleFilterReset}
                       variant="outline"
                       className="font-medium border-border text-foreground hover:bg-secondary text-xs"
                     >
