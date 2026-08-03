@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useFlights } from '../hooks/useFlights';
-import type { Flight } from '../hooks/useFlights';
+import { useFlights, DEFAULT_FILTERS } from '../hooks/useFlights';
+import type { Flight, FilterState } from '../hooks/useFlights';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { SearchBar } from './SearchBar';
 import { FilterBar } from './FilterBar';
@@ -26,6 +26,12 @@ import { useIsMobile } from '../hooks/useIsMobile';
 // not to add meaningful time to a participant's task.
 const SEARCH_LOADING_MS = 800;
 
+// Filters fire on every click/drag step (a price slider alone can emit a dozen
+// changes while being dragged). Showing the loader on each one is just flicker,
+// not feedback — so the loader waits for a pause in filter activity, the same
+// debounce-before-you-search pattern as a live-typed search box.
+const FILTER_LOADING_DEBOUNCE_MS = 400;
+
 export const DashboardView: React.FC = () => {
   const {
     flights,
@@ -41,11 +47,12 @@ export const DashboardView: React.FC = () => {
     stats,
     updateSearch,
     updateFilter,
+    applyFilters,
     resetFilters,
     updateSortType,
   } = useFlights();
 
-  const { logCardClick, logDetailView } = useSessionLogger();
+  const { logCardClick, logDetailView, logFilterChange } = useSessionLogger();
   const isMobile = useIsMobile();
   // One flight (one-way) or [outbound, return] shown in the detail popup
   const [selectedFlights, setSelectedFlights] = useState<Flight[] | null>(null);
@@ -71,11 +78,52 @@ export const DashboardView: React.FC = () => {
     loadingTimerRef.current = setTimeout(() => setResultsLoading(false), SEARCH_LOADING_MS);
   }, []);
 
+  const filterDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Filters shown on the controls (chip labels, checkboxes, the price slider
+  // thumb) update the instant the user interacts — that responsiveness matters
+  // regardless of the loader. What must NOT move early is the actual RESULT
+  // set: `filters` (the hook's committed state that drives flights/stats) only
+  // catches up once the loader is up and hiding the swap, so draftFilters is
+  // the "what the user asked for" value and `filters` is "what's on screen".
+  const [draftFilters, setDraftFilters] = useState<FilterState>(filters);
+  const pendingFiltersRef = React.useRef<FilterState>(filters);
+
   React.useEffect(() => {
     return () => {
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
     };
   }, []);
+
+  // Filters apply instantly (no Search click), so without a loading beat the
+  // list just silently swaps underneath the user. The loader is debounced
+  // (each change restarts the wait, so a slider drag doesn't flicker it on
+  // every step) — and the committed filter data is applied in the same beat
+  // the loader begins, so it's hidden behind the skeleton the whole time and
+  // only ever revealed once the loader has finished, never before.
+  const handleFilterChange = React.useCallback(
+    <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
+      const next = { ...pendingFiltersRef.current, [key]: value };
+      pendingFiltersRef.current = next;
+      setDraftFilters(next);
+      logFilterChange(key, value);
+      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+      filterDebounceRef.current = setTimeout(() => {
+        applyFilters(pendingFiltersRef.current);
+        beginResultsLoading();
+      }, FILTER_LOADING_DEBOUNCE_MS);
+    },
+    [applyFilters, beginResultsLoading, logFilterChange]
+  );
+
+  const handleFilterReset = React.useCallback(() => {
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    pendingFiltersRef.current = DEFAULT_FILTERS;
+    setDraftFilters(DEFAULT_FILTERS);
+    resetFilters();
+    beginResultsLoading();
+  }, [resetFilters, beginResultsLoading]);
 
   const exampleSearches = [
     { label: 'London to Barcelona', originCode: 'LON', destCity: 'Barcelona', date: '2026-07-20', direction: 'outbound' as const },
@@ -87,7 +135,11 @@ export const DashboardView: React.FC = () => {
     setAdults(newSearch.passengers);
     // A new search is a fresh context — stale filters from the previous
     // search (price cap, airlines, etc.) would otherwise silently carry over
-    // and hide results the new search should show.
+    // and hide results the new search should show. Also drop any in-flight
+    // filter debounce so it can't fire after this and clobber the fresh search.
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    pendingFiltersRef.current = DEFAULT_FILTERS;
+    setDraftFilters(DEFAULT_FILTERS);
     resetFilters();
     updateSearch({
       originCode: newSearch.originCode,
@@ -111,6 +163,9 @@ export const DashboardView: React.FC = () => {
       endDate: example.endDate || '2026-07-27',
       direction: example.direction,
     };
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    pendingFiltersRef.current = DEFAULT_FILTERS;
+    setDraftFilters(DEFAULT_FILTERS);
     resetFilters();
     updateSearch(newSearch);
     setHasSearched(true);
@@ -454,8 +509,8 @@ export const DashboardView: React.FC = () => {
                   initialDirection={searchState.direction}
                   initialPassengers={adults}
                   rawFlights={rawFlights}
-                  cabinClass={filters.cabinClass}
-                  onCabinChange={(val) => updateFilter('cabinClass', val)}
+                  cabinClass={draftFilters.cabinClass}
+                  onCabinChange={(val) => handleFilterChange('cabinClass', val)}
                   onSearch={handleSearchSubmit}
                   isSearching={resultsLoading}
                 />
@@ -463,7 +518,9 @@ export const DashboardView: React.FC = () => {
 
               {/* Search progress — sits directly under the form (Google Flights'
                   thin sliding bar) so the pending state is visible on the
-                  collapsed mobile summary too, not only inside the form. */}
+                  collapsed mobile summary too, not only inside the form. Also
+                  covers filter changes now (see handleFilterChange), since
+                  those apply just as instantly as a search submit. */}
               {resultsLoading && (
                 <SearchProgress originLabel={originLabel} destLabel={destLabel} />
               )}
@@ -471,12 +528,12 @@ export const DashboardView: React.FC = () => {
               {/* 3. Persistent filter row (Google Flights-style). Always visible on
                    the results screen; every control applies instantly. */}
               <FilterBar
-                filters={filters}
+                filters={draftFilters}
                 uniqueAirlines={uniqueAirlines}
                 airlinePrices={airlinePrices}
                 medianCo2={medianCo2}
-                onFilterChange={updateFilter}
-                onReset={resetFilters}
+                onFilterChange={handleFilterChange}
+                onReset={handleFilterReset}
               />
             </section>
 
@@ -551,7 +608,7 @@ export const DashboardView: React.FC = () => {
                       </p>
                     </div>
                     <Button
-                      onClick={resetFilters}
+                      onClick={handleFilterReset}
                       variant="outline"
                       className="font-medium border-border text-foreground hover:bg-secondary text-xs"
                     >
