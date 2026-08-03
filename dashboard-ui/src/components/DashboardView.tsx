@@ -16,6 +16,7 @@ import { RoundTripCard } from './RoundTripCard';
 import { ResultsSkeleton } from './ResultsSkeleton';
 import { SearchProgress } from './SearchProgress';
 import { getCityName } from '../lib/airportMap';
+import { DestinationGrid } from './DestinationGrid';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 // How long the search-pending state is held. Filtering is synchronous, so this
@@ -168,6 +169,45 @@ export const DashboardView: React.FC = () => {
 
   const resultCount = isRoundTrip ? roundTripPairs.length : flights.length;
   const hasResults = resultCount > 0;
+
+  // "Anywhere" search (no destination picked): group results by destination
+  // city instead of listing individual flights, so it's clear at a glance
+  // where the results actually go. Grouped from the already-filtered/sorted
+  // flights/pairs, so it respects every active filter.
+  const destinationGroups = React.useMemo(() => {
+    if (searchState.destCity) return [];
+    const map = new Map<string, { code: string; city: string; count: number; cheapest: number }>();
+    if (isRoundTrip) {
+      for (const { out, ret } of roundTripPairs) {
+        const total = out.price_gbp + ret.price_gbp;
+        const entry = map.get(out.dest_code);
+        if (entry) {
+          entry.count++;
+          if (total < entry.cheapest) entry.cheapest = total;
+        } else {
+          map.set(out.dest_code, { code: out.dest_code, city: getCityName(out.dest_code), count: 1, cheapest: total });
+        }
+      }
+    } else {
+      for (const f of flights) {
+        if (f.direction !== 'outbound') continue;
+        const entry = map.get(f.dest_code);
+        if (entry) {
+          entry.count++;
+          if (f.price_gbp < entry.cheapest) entry.cheapest = f.price_gbp;
+        } else {
+          map.set(f.dest_code, { code: f.dest_code, city: getCityName(f.dest_code), count: 1, cheapest: f.price_gbp });
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.cheapest - b.cheapest);
+  }, [searchState.destCity, isRoundTrip, roundTripPairs, flights]);
+  const showDestinationGrid = !searchState.destCity && destinationGroups.length > 0;
+
+  const handleDestinationSelect = (city: string) => {
+    updateSearch({ ...searchState, destCity: city });
+    beginResultsLoading();
+  };
 
   const originLabel = searchState.originCode === 'LON' ? 'London' : getCityName(searchState.originCode);
   const destLabel = searchState.destCity
@@ -441,14 +481,17 @@ export const DashboardView: React.FC = () => {
                   loading={resultsLoading}
                 />
 
-                {/* 5. Sorting Controls */}
-                <SortBar
-                  sortType={sortType}
-                  onChange={updateSortType}
-                />
+                {/* 5. Sorting Controls — not shown over the destination grid,
+                     which is always ranked cheapest-first */}
+                {!showDestinationGrid && (
+                  <SortBar
+                    sortType={sortType}
+                    onChange={updateSortType}
+                  />
+                )}
 
                 {/* Performance Warning if results are truncated for sorting */}
-                {!resultsLoading && totalFilteredCount > 5000 && (
+                {!resultsLoading && !showDestinationGrid && totalFilteredCount > 5000 && (
                   <div className="bg-transparent border border-accent-amber/40 text-accent-amber rounded-lg p-3 text-xs text-left font-medium flex items-start gap-2">
                     <HelpCircle className="w-4 h-4 text-accent-amber shrink-0 mt-0.5" />
                     <div>
@@ -460,9 +503,21 @@ export const DashboardView: React.FC = () => {
                   </div>
                 )}
 
-                {/* 6. Results List (Virtualized) */}
+                {/* 6. Results: destination grid for an "anywhere" search
+                     (no destination picked), flight list otherwise */}
                 {resultsLoading ? (
                   <ResultsSkeleton isRoundTrip={isRoundTrip} />
+                ) : showDestinationGrid ? (
+                  <div className="flex flex-col gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      No destination picked — showing <span className="font-mono tabular-nums">{destinationGroups.length.toLocaleString()}</span> destinations from {originLabel}. Pick one to see flights.
+                    </p>
+                    <DestinationGrid
+                      destinations={destinationGroups}
+                      isRoundTrip={isRoundTrip}
+                      onSelect={handleDestinationSelect}
+                    />
+                  </div>
                 ) : !hasResults ? (
                   <div className="w-full bg-card border border-border rounded-lg p-12 text-center flex flex-col items-center justify-center gap-4 shadow-card min-h-[400px]">
                     <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center border border-border">
