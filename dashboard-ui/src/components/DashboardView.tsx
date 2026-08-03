@@ -85,6 +85,10 @@ export const DashboardView: React.FC = () => {
 
   const handleSearchSubmit = (newSearch: { originCode: string; destCity: string; date: string; endDate?: string; direction: 'outbound' | 'return'; passengers: number }) => {
     setAdults(newSearch.passengers);
+    // A new search is a fresh context — stale filters from the previous
+    // search (price cap, airlines, etc.) would otherwise silently carry over
+    // and hide results the new search should show.
+    resetFilters();
     updateSearch({
       originCode: newSearch.originCode,
       destCity: newSearch.destCity,
@@ -107,6 +111,7 @@ export const DashboardView: React.FC = () => {
       endDate: example.endDate || '2026-07-27',
       direction: example.direction,
     };
+    resetFilters();
     updateSearch(newSearch);
     setHasSearched(true);
     setMobileFormExpanded(false);
@@ -151,6 +156,12 @@ export const DashboardView: React.FC = () => {
       // Both lists inherit the active sort order, so the first few return
       // candidates are the best ones under the current criterion.
       for (const ret of candidates.slice(0, PAIR_RETURNS_PER_OUTBOUND)) {
+        // Each leg passes the price filter individually, but the itinerary
+        // shown to the user is the COMBINED total — a £190 + £190 pair both
+        // clear a £200-per-leg cap yet the £380 total the card displays
+        // doesn't, so the max has to be enforced on the pair, not the leg.
+        const total = out.price_gbp + ret.price_gbp;
+        if (total < filters.priceRange[0] || total > filters.priceRange[1]) continue;
         pairs.push({ out, ret });
       }
     }
@@ -165,7 +176,7 @@ export const DashboardView: React.FC = () => {
     };
     pairs.sort((a, b) => rank(a) - rank(b));
     return pairs.slice(0, PAIR_RESULT_CAP);
-  }, [flights, isRoundTrip, sortType]);
+  }, [flights, isRoundTrip, sortType, filters.priceRange]);
 
   const resultCount = isRoundTrip ? roundTripPairs.length : flights.length;
   const hasResults = resultCount > 0;
