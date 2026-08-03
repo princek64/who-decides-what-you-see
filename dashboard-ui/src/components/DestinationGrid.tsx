@@ -16,11 +16,7 @@ interface DestinationGridProps {
   onSelect: (city: string) => void;
 }
 
-// Shown instead of the flat flight list when a search has no destination set
-// ("anywhere" search). A wall of individual flight cards to dozens of
-// different cities makes it hard to see where flights actually go — this
-// groups by destination city first, so the destinations themselves are the
-// thing being scanned, with a drill-down into the flight list on click.
+// Shown instead of the flat flight list when no destination is picked (anywhere search).
 export const DestinationGrid: React.FC<DestinationGridProps> = ({ destinations, isRoundTrip, onSelect }) => {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 w-full">

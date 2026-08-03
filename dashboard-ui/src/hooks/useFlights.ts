@@ -210,10 +210,7 @@ export function useFlights() {
     logFilterChange(key, value);
   };
 
-  // Commits a full filter object without logging — used when the caller (the
-  // filter-bar debounce in DashboardView) has already logged the interaction
-  // itself and just needs the actual query state to catch up once the loader
-  // is ready to hide the swap.
+  // Commits a full filter object without logging (caller already logged the interaction).
   const applyFilters = (newFilters: FilterState) => {
     setFilters(newFilters);
   };
