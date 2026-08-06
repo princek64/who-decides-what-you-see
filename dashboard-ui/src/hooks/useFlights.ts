@@ -48,7 +48,11 @@ export interface FilterState {
   stops: 'all' | 'direct' | '1stop';
   cabinClass: 'all' | 'Economy' | 'Premium Economy' | 'Business';
   airlines: string[];
+  // Outbound leg time-of-day filter. Also the only time filter for one-way searches.
   departureTime: 'all' | 'morning' | 'afternoon' | 'evening' | 'night';
+  // Return leg time-of-day filter (round trips only), independent of departureTime
+  // so e.g. "morning outbound, evening return" is expressible.
+  departureTimeReturn: 'all' | 'morning' | 'afternoon' | 'evening' | 'night';
   flexibility: 'all' | 'Non-refundable' | 'Changeable' | 'Fully flexible';
   lowCo2Only: boolean;
   demandIndicator: 'all' | 'Low' | 'Medium' | 'High' | 'Filling Fast';
@@ -62,6 +66,7 @@ export const DEFAULT_FILTERS: FilterState = {
   cabinClass: 'Economy',
   airlines: [],
   departureTime: 'all',
+  departureTimeReturn: 'all',
   flexibility: 'all',
   lowCo2Only: false,
   demandIndicator: 'all',
@@ -341,15 +346,18 @@ export function useFlights() {
       // 8. Airline checklist
       if (filters.airlines.length > 0 && !filters.airlines.includes(flight.airline_name)) return false;
 
-      // 9. Departure time filter (using integer minutes from midnight)
+      // 9. Departure time filter (using integer minutes from midnight). Return
+      // legs use their own filter so round trips can target e.g. "morning
+      // outbound, evening return"; one-way flights are always 'outbound'.
       const depMins = flight.departure_mins_from_midnight;
-      if (filters.departureTime === 'morning') {
+      const timeFilter = flight.direction === 'return' ? filters.departureTimeReturn : filters.departureTime;
+      if (timeFilter === 'morning') {
         if (depMins < 360 || depMins >= 720) return false; // 06:00 - 11:59
-      } else if (filters.departureTime === 'afternoon') {
+      } else if (timeFilter === 'afternoon') {
         if (depMins < 720 || depMins >= 1080) return false; // 12:00 - 17:59
-      } else if (filters.departureTime === 'evening') {
+      } else if (timeFilter === 'evening') {
         if (depMins < 1080 || depMins >= 1440) return false; // 18:00 - 23:59
-      } else if (filters.departureTime === 'night') {
+      } else if (timeFilter === 'night') {
         if (depMins < 0 || depMins >= 360) return false; // 00:00 - 05:59
       }
 
