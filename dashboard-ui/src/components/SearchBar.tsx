@@ -3,7 +3,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Search, MapPin, ArrowLeftRight, User, Armchair, Loader2, Compass } from 'lucide-react';
-import { DESTINATION_CITIES, CITY_TO_CODE, getCityCountry, getCityName } from '../lib/airportMap';
+import { DESTINATION_CITIES, CITY_TO_CODE, getCityCountry } from '../lib/airportMap';
 import { computeDatePrices } from '../hooks/useFlights';
 import type { Flight } from '../hooks/useFlights';
 import { PriceCalendar } from './PriceCalendar';
@@ -33,6 +33,18 @@ interface SearchBarProps {
 // Shown when the destination field is focused while still empty,
 // like Google Flights' suggested destinations.
 const POPULAR_DESTINATIONS = ['Barcelona', 'Paris', 'Rome', 'Amsterdam', 'Madrid', 'Lisbon'];
+
+// Mirrors the Origin dropdown's SelectItems below — used by the swap button
+// to match a destination's text back to a valid origin code.
+const ORIGIN_OPTIONS = [
+  { code: 'LON', label: 'London (All Airports)' },
+  { code: 'LHR', label: 'London Heathrow (LHR)' },
+  { code: 'LGW', label: 'London Gatwick (LGW)' },
+  { code: 'STN', label: 'London Stansted (STN)' },
+  { code: 'LTN', label: 'London Luton (LTN)' },
+  { code: 'LCY', label: 'London City (LCY)' },
+  { code: 'SEN', label: 'London Southend (SEN)' },
+];
 
 // Today's date as a YYYY-MM-DD key in the user's local time — used as the
 // floor for selectable travel dates so nothing in the past is bookable.
@@ -154,20 +166,20 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     setActiveSuggestion(-1);
   };
 
-  // Swaps Origin and Destination. Origin is a fixed London-airport dropdown
-  // and Destination is a free-text city, so the swap maps as best it can: the
-  // destination city becomes the new origin, but only if it's actually one of
-  // the London airports the Origin dropdown offers (falling back to "London
-  // (All Airports)" otherwise — every flight in this dataset departs from or
-  // returns to London), and the old origin's city name becomes the new
-  // destination text.
+  // Swaps Origin and Destination — a true value swap, not a one-way copy.
+  // Origin is a fixed London-airport dropdown (see ORIGIN_OPTIONS, mirroring
+  // the SelectItems below) and Destination is free text, so the two field
+  // values are swapped via their exact display labels: the old origin's
+  // label becomes the new destination text, and the old destination text
+  // becomes the new origin only if it matches one of the origin dropdown's
+  // labels exactly — otherwise origin is left empty (no London airport is a
+  // valid stand-in for an arbitrary city). This makes the swap reversible:
+  // swapping twice restores the original values.
   const handleSwap = () => {
-    const ORIGIN_CODES = new Set(['LON', 'LHR', 'LGW', 'STN', 'LTN', 'LCY', 'SEN']);
-    const originCity = originCode === 'LON' ? 'London' : getCityName(originCode);
-    const matchedCodes = CITY_TO_CODE[destCity.trim().toLowerCase()] || [];
-    const newOriginCode = matchedCodes.find((code) => ORIGIN_CODES.has(code));
-    setOriginCode(newOriginCode || 'LON');
-    setDestCity(originCity);
+    const originLabel = ORIGIN_OPTIONS.find((o) => o.code === originCode)?.label ?? '';
+    const matched = ORIGIN_OPTIONS.find((o) => o.label.toLowerCase() === destCity.trim().toLowerCase());
+    setOriginCode(matched ? matched.code : '');
+    setDestCity(originLabel);
     setSuggestions([]);
     setShowSuggestions(false);
   };
@@ -323,18 +335,23 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         </Select>
       </div>
 
-      {/* Swap Origin/Destination. The blank label keeps the button's h-10
-          hit area aligned with the two field inputs, not their labels. */}
-      <div className="flex flex-col gap-1.5 shrink-0">
-        <span className="text-[11px] leading-4 opacity-0 select-none hidden sm:block" aria-hidden="true">Swap</span>
+      {/* Swap Origin/Destination — Google Flights / Skyscanner style: a small
+          circular button sitting ON the seam between the two fields rather
+          than occupying its own layout slot. This anchor has zero width, so
+          with equal gaps on both sides (the form's `gap-4`) it lands exactly
+          on the border between Origin and Destination; the button is then
+          centered on that point and overlaps both fields evenly. Hidden
+          below 480px, where the fields stack and there's no shared border to
+          sit on (mirrors the fields' own `max-[480px]:basis-full`). */}
+      <div className="relative w-0 h-10 shrink-0 max-[480px]:hidden" aria-hidden="false">
         <button
           type="button"
           onClick={handleSwap}
           aria-label="Swap origin and destination"
           title="Swap origin and destination"
-          className="w-10 h-10 flex items-center justify-center rounded-md border border-border bg-transparent text-foreground hover:bg-secondary hover:border-white/20 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-full border border-border bg-card text-foreground shadow-card hover:bg-secondary hover:border-white/20 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          <ArrowLeftRight className="w-4 h-4" />
+          <ArrowLeftRight className="w-3.5 h-3.5" />
         </button>
       </div>
 
