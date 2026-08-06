@@ -29,7 +29,12 @@ export const DestinationGridView: React.FC<{
             key={d.code}
             type="button"
             onClick={() =>
-              onRefine?.({ dest_city: d.city, dest_code: undefined, layout: 'grid' }, `Flights to ${d.city}`)
+              // Picking a city from an open/budget search means going there and
+              // back, so drill in with both directions rather than one-way only.
+              onRefine?.(
+                { dest_city: d.city, dest_code: undefined, direction: 'both', layout: 'grid' },
+                `Flights to ${d.city}`
+              )
             }
             title={`Search flights to ${d.city}`}
             className="bg-card border border-border rounded-lg p-5 hover:border-white/20 transition-colors text-left disabled:cursor-default"

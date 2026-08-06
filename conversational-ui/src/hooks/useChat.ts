@@ -43,7 +43,6 @@ export interface ChatMessage {
   retryable?: boolean;
   preface?: string;
   flights?: Flight[];
-  isExpanded?: boolean;
   timestamp: number;
 }
 
@@ -66,7 +65,7 @@ export const useChat = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [medianCo2, setMedianCo2] = useState<number>(80);
 
-  const { logUserMessage, logAiResponse, logShowAllResults } = useSessionLogger();
+  const { logUserMessage, logAiResponse } = useSessionLogger();
 
   // Load and parse the JSON on mount
   useEffect(() => {
@@ -293,7 +292,6 @@ export const useChat = () => {
       intent,
       slot,
       flights: filteredResults,
-      isExpanded: false,
     });
   };
 
@@ -470,21 +468,6 @@ export const useChat = () => {
     void runDeterministicSearch({ ...sourceSlot, origin: null }, 'Search from London instead');
   };
 
-  const toggleExpandMessage = (messageId: string) => {
-    setMessages((prev) =>
-      prev.map((msg) => {
-        if (msg.id === messageId) {
-          const nextExpanded = !msg.isExpanded;
-          if (nextExpanded && msg.flights) {
-            logShowAllResults(msg.flights.length);
-          }
-          return { ...msg, isExpanded: nextExpanded };
-        }
-        return msg;
-      })
-    );
-  };
-
   const clearConversation = () => {
     setMessages([]);
     setError(null);
@@ -502,6 +485,5 @@ export const useChat = () => {
     refineOrigin,
     searchFromLondon,
     clearConversation,
-    toggleExpandMessage,
   };
 };

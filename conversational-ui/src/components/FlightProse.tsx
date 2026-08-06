@@ -1,15 +1,13 @@
 import React from 'react';
 import type { Flight, IntentJSON } from '../hooks/useFlightFilter';
 import { formatFlightDate } from '../lib/utils';
-import { buildProseAnswer, TABLE_MAX_ROWS } from '../lib/prose';
+import { bookingHref, buildProseAnswer } from '../lib/prose';
 import type { ProseBlock, ProseNode } from '../lib/prose';
 import { getCityName } from '../lib/airportMap';
 
 interface FlightProseProps {
   flights: Flight[];
   intent: IntentJSON;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
   /** Comparison / cheapest-day answers keep connecting flights on screen. */
   keepStops?: boolean;
 }
@@ -17,29 +15,33 @@ interface FlightProseProps {
 export const FlightProse: React.FC<FlightProseProps> = ({
   flights,
   intent,
-  isExpanded,
-  onToggleExpand,
   keepStops,
 }) => {
   // The builder decides what is on screen (direct-only display rule, bullets vs
-  // table, how many rows), so the toggle below reads its numbers rather than
-  // re-deriving them from the raw result set.
-  const answer = buildProseAnswer(flights, intent, { keepStops, expanded: isExpanded });
+  // table, how many rows).
+  const answer = buildProseAnswer(flights, intent, { keepStops });
   const rows = answer.table ?? [];
-  const isTruncated = answer.available > TABLE_MAX_ROWS;
 
   const cell = 'py-2 pr-5 whitespace-nowrap align-middle';
+  const linkClass =
+    'text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground transition-colors';
 
   const renderNodes = (nodes: ProseNode[]) =>
-    nodes.map((node, i) =>
-      node.type === 'text' ? (
-        <React.Fragment key={i}>{node.text}</React.Fragment>
-      ) : (
+    nodes.map((node, i) => {
+      if (node.type === 'text') return <React.Fragment key={i}>{node.text}</React.Fragment>;
+      if (node.type === 'link') {
+        return (
+          <a key={i} href={node.href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+            {node.text}
+          </a>
+        );
+      }
+      return (
         <strong key={i} className="font-semibold text-foreground">
           {node.text}
         </strong>
-      )
-    );
+      );
+    });
 
   const renderBlocks = (blocks: ProseBlock[]) =>
     blocks.map((block, i) =>
@@ -76,7 +78,8 @@ export const FlightProse: React.FC<FlightProseProps> = ({
                 <th className={`${cell} font-medium`}>Arrive</th>
                 <th className={`${cell} font-medium`}>Duration</th>
                 <th className={`${cell} font-medium`}>Stops</th>
-                <th className={`${cell} font-medium pr-0`}>Price</th>
+                <th className={`${cell} font-medium`}>Price</th>
+                <th className={`${cell} font-medium pr-0`} />
               </tr>
             </thead>
             <tbody>
@@ -105,41 +108,24 @@ export const FlightProse: React.FC<FlightProseProps> = ({
                   <td className={`${cell} text-muted-foreground`}>
                     {f.stops === 0 ? 'Direct' : `${f.stops} stop${f.stops === 1 ? '' : 's'}`}
                   </td>
-                  <td className={`${cell} pr-0 font-mono tabular-nums`}>
+                  <td className={`${cell} font-mono tabular-nums`}>
                     £{f.price_gbp.toFixed(2)}
+                  </td>
+                  <td className={`${cell} pr-0`}>
+                    <a
+                      href={bookingHref(f)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1 px-2.5 transition-colors whitespace-nowrap"
+                    >
+                      Book on {f.airline_name}
+                    </a>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-
-          {isExpanded && isTruncated && (
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Showing the top {TABLE_MAX_ROWS} of {answer.available.toLocaleString()} results —
-              refine your search to narrow it down.
-            </p>
-          )}
         </div>
-      )}
-
-      {/* Expand/collapse — drives both the bullet list and the table */}
-      {answer.available > answer.displayed && !isExpanded && (
-        <button
-          type="button"
-          onClick={onToggleExpand}
-          className="mt-2 text-[12px] text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground transition-colors"
-        >
-          Show all {answer.available.toLocaleString()} results
-        </button>
-      )}
-      {isExpanded && (
-        <button
-          type="button"
-          onClick={onToggleExpand}
-          className="mt-2 text-[12px] text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground transition-colors"
-        >
-          Show fewer
-        </button>
       )}
 
       {/* Closing recommendation sits under the table, where the reader lands */}

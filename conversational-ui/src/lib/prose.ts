@@ -6,15 +6,19 @@ import { cheapestBy } from './insights';
 export const LARGE_RESULT_THRESHOLD = 30;
 
 export const TABLE_MIN_RESULTS = 4;
-/** Rows/bullets shown collapsed; expanding logs show_all_results. */
+/** Rows/bullets shown — the app never offers a way to dump the full result set. */
 export const TABLE_PREVIEW_ROWS = 6;
-/** Hard cap on rendered rows — the list is not virtualized. */
-export const TABLE_MAX_ROWS = 100;
 
 export type ProseNode =
   | { type: 'text'; text: string }
   | { type: 'strong'; text: string }
-  | { type: 'flight'; text: string; flight: Flight };
+  | { type: 'flight'; text: string; flight: Flight }
+  | { type: 'link'; text: string; href: string };
+
+// Dummy booking URL — this is a research prototype, not a real booking flow;
+// the link only needs to show that clicking through to book is the next step.
+export const bookingHref = (f: Flight): string =>
+  `https://www.${f.airline_name.toLowerCase().replace(/[^a-z0-9]+/g, '')}.example/book/${f.flight_id}`;
 
 
 export type ProseBlock =
@@ -33,7 +37,6 @@ export interface ProseAnswer {
 
 export interface ProseOptions {
   keepStops?: boolean;
-  expanded?: boolean;
 }
 
 // "London Gatwick" -> "Gatwick"; unknown codes fall back to the code itself.
@@ -105,6 +108,8 @@ const flightBullet = (f: Flight, withDate: boolean, withDest: boolean): ProseNod
         `${stopsClause(f)} (${f.duration_formatted}) — `,
     },
     { type: 'strong', text: money(f.price_gbp) },
+    { type: 'text', text: ' — ' },
+    { type: 'link', text: `Book on ${f.airline_name}`, href: bookingHref(f) },
   ];
 };
 
@@ -121,6 +126,8 @@ const flightSentence = (f: Flight, withDate: boolean, withDest: boolean): ProseN
       `${stopsClause(f)} (${f.duration_formatted}), at `,
   },
   { type: 'strong', text: money(f.price_gbp) },
+  { type: 'text', text: ' — ' },
+  { type: 'link', text: `Book on ${f.airline_name}`, href: bookingHref(f) },
   { type: 'text', text: '.' },
 ];
 
@@ -210,7 +217,9 @@ const blocksToText = (blocks: ProseBlock[]): string =>
     .join('\n\n');
 
 const nodesToMarkdown = (nodes: ProseNode[]): string =>
-  nodes.map((n) => (n.type === 'text' ? n.text : `**${n.text}**`)).join('');
+  nodes
+    .map((n) => (n.type === 'text' ? n.text : n.type === 'link' ? `${n.text} (${n.href})` : `**${n.text}**`))
+    .join('');
 
 export const buildProseAnswer = (
   results: Flight[],
@@ -267,9 +276,7 @@ export const buildProseAnswer = (
   }
 
   const uniform = shown.every((f) => f.stops === 0) || shown.every((f) => f.stops > 0);
-  const visible = opts.expanded
-    ? Math.min(count, TABLE_MAX_ROWS)
-    : Math.min(count, TABLE_PREVIEW_ROWS);
+  const visible = Math.min(count, TABLE_PREVIEW_ROWS);
 
   if (!(uniform && count > TABLE_MIN_RESULTS)) {
     const lead =
