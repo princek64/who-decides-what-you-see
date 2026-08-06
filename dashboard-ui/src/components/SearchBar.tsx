@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Search, MapPin, ArrowLeftRight, User, Armchair, Loader2 } from 'lucide-react';
-import { DESTINATION_CITIES, CITY_TO_CODE, getCityCountry } from '../lib/airportMap';
+import { Search, MapPin, ArrowLeftRight, User, Armchair, Loader2, Compass } from 'lucide-react';
+import { DESTINATION_CITIES, CITY_TO_CODE, getCityCountry, getCityName } from '../lib/airportMap';
 import { computeDatePrices } from '../hooks/useFlights';
 import type { Flight } from '../hooks/useFlights';
 import { PriceCalendar } from './PriceCalendar';
@@ -21,6 +21,10 @@ interface SearchBarProps {
   cabinClass: 'all' | 'Economy' | 'Premium Economy' | 'Business';
   onCabinChange: (value: 'all' | 'Economy' | 'Premium Economy' | 'Business') => void;
   onSearch: (search: { originCode: string; destCity: string; date: string; endDate?: string; direction: 'outbound' | 'return'; passengers: number }) => void;
+  // Fired the moment a date (or full date range) is picked, independent of
+  // the Search button — lets the results screen refresh in place, keeping
+  // every other filter, instead of requiring a full re-search.
+  onDateChange?: (date: string, endDate?: string) => void;
   // True while the submitted search is still resolving — the button shows a
   // spinner and rejects re-submits so a double click can't restart the window.
   isSearching?: boolean;
@@ -48,6 +52,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   cabinClass,
   onCabinChange,
   onSearch,
+  onDateChange,
   isSearching = false,
 }) => {
   // Flight data covers H2 2026, but we never let a participant pick a date in
@@ -147,6 +152,24 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     setSuggestions([]);
     setShowSuggestions(false);
     setActiveSuggestion(-1);
+  };
+
+  // Swaps Origin and Destination. Origin is a fixed London-airport dropdown
+  // and Destination is a free-text city, so the swap maps as best it can: the
+  // destination city becomes the new origin, but only if it's actually one of
+  // the London airports the Origin dropdown offers (falling back to "London
+  // (All Airports)" otherwise — every flight in this dataset departs from or
+  // returns to London), and the old origin's city name becomes the new
+  // destination text.
+  const handleSwap = () => {
+    const ORIGIN_CODES = new Set(['LON', 'LHR', 'LGW', 'STN', 'LTN', 'LCY', 'SEN']);
+    const originCity = originCode === 'LON' ? 'London' : getCityName(originCode);
+    const matchedCodes = CITY_TO_CODE[destCity.trim().toLowerCase()] || [];
+    const newOriginCode = matchedCodes.find((code) => ORIGIN_CODES.has(code));
+    setOriginCode(newOriginCode || 'LON');
+    setDestCity(originCity);
+    setSuggestions([]);
+    setShowSuggestions(false);
   };
 
   // Arrow-key navigation over the suggestion list
@@ -300,6 +323,21 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         </Select>
       </div>
 
+      {/* Swap Origin/Destination. The blank label keeps the button's h-10
+          hit area aligned with the two field inputs, not their labels. */}
+      <div className="flex flex-col gap-1.5 shrink-0">
+        <span className="text-[11px] leading-4 opacity-0 select-none hidden sm:block" aria-hidden="true">Swap</span>
+        <button
+          type="button"
+          onClick={handleSwap}
+          aria-label="Swap origin and destination"
+          title="Swap origin and destination"
+          className="w-10 h-10 flex items-center justify-center rounded-md border border-border bg-transparent text-foreground hover:bg-secondary hover:border-white/20 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          <ArrowLeftRight className="w-4 h-4" />
+        </button>
+      </div>
+
       {/* 2. Destination City Input with Suggestions */}
       <div className="flex flex-col gap-1.5 text-left relative flex-[2_1_220px] max-[480px]:basis-full" ref={suggestionRef}>
         <label className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider">Destination City</label>
@@ -372,6 +410,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             onRangeChange={(start, end) => {
               setDate(start);
               setEndDate(end);
+              // Only propagate once both dates are picked — the first click of
+              // a range re-pick clears `end`, which isn't a complete date yet.
+              if (end) onDateChange?.(start, end);
             }}
             minDate={MIN_DATE}
             maxDate={DATA_MAX}
@@ -382,7 +423,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         ) : (
           <PriceCalendar
             value={date}
-            onChange={setDate}
+            onChange={(d) => {
+              setDate(d);
+              onDateChange?.(d);
+            }}
             minDate={MIN_DATE}
             maxDate={DATA_MAX}
             getPrices={getOutboundPrices}
@@ -392,7 +436,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         )}
       </div>
 
-      {/* 4. Search Button (full width under 480px) */}
+      {/* 4. Search Button (full width under 480px). No fixed destination means
+          this is an open-ended budget/date exploration rather than a lookup
+          for a specific route, so the action reads as "Explore". */}
       <div className="flex-[0.8_1_120px] max-[480px]:basis-full">
         <Button
           type="submit"
@@ -400,8 +446,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           aria-busy={isSearching || undefined}
           className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-medium flex items-center justify-center gap-1.5 transition-all rounded-md disabled:opacity-70 disabled:pointer-events-none"
         >
-          {isSearching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-          {isSearching ? 'Searching' : 'Search'}
+          {isSearching ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : destCity.trim() ? (
+            <Search className="w-4 h-4" />
+          ) : (
+            <Compass className="w-4 h-4" />
+          )}
+          {isSearching ? (destCity.trim() ? 'Searching' : 'Exploring') : destCity.trim() ? 'Search' : 'Explore'}
         </Button>
       </div>
 

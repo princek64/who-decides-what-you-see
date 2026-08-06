@@ -69,6 +69,11 @@ export const DashboardView: React.FC = () => {
   // Track if search has been run
   const [hasSearched, setHasSearched] = useState(false);
 
+  // True when the current results came from an open-destination ("Explore")
+  // search. Lets a destination picked off the grid be backed out of, back to
+  // the grid, instead of only being able to restart the whole search.
+  const [exploreMode, setExploreMode] = useState(false);
+
   // Mobile only: after a search the full search form collapses into a compact
   // sticky summary so results land above the fold. Tapping it re-expands the
   // form. Desktop always shows the full form (this flag is ignored ≥sm).
@@ -129,14 +134,9 @@ export const DashboardView: React.FC = () => {
     setDraftFilters(DEFAULT_FILTERS);
     setAdults(1);
     setHasSearched(false);
+    setExploreMode(false);
     setMobileFormExpanded(false);
   }, [updateSearch]);
-
-  const exampleSearches = [
-    { label: 'London to Barcelona', originCode: 'LON', destCity: 'Barcelona', date: '2026-07-20', direction: 'outbound' as const },
-    { label: 'London Heathrow to Paris', originCode: 'LHR', destCity: 'Paris', date: '2026-07-25', direction: 'outbound' as const },
-    { label: 'London to Rome (Round trip)', originCode: 'LON', destCity: 'Rome', date: '2026-08-15', endDate: '2026-08-22', direction: 'return' as const }
-  ];
 
   const handleSearchSubmit = (newSearch: { originCode: string; destCity: string; date: string; endDate?: string; direction: 'outbound' | 'return'; passengers: number }) => {
     setAdults(newSearch.passengers);
@@ -154,28 +154,26 @@ export const DashboardView: React.FC = () => {
     });
     // An empty destination is a valid "anywhere" search (e.g. the open-ended
     // "£150 budget, where can I go?" research task) — always show results.
+    // Remembered so a destination picked off the results grid can later be
+    // backed out of without losing the rest of the search.
+    setExploreMode(!newSearch.destCity);
     setHasSearched(true);
     setMobileFormExpanded(false);
     beginResultsLoading();
   };
 
-  const handleExampleClick = (example: typeof exampleSearches[0]) => {
-    const newSearch = {
-      originCode: example.originCode,
-      destCity: example.destCity,
-      date: example.date,
-      endDate: example.endDate || '2026-07-27',
-      direction: example.direction,
-    };
-    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
-    pendingFiltersRef.current = DEFAULT_FILTERS;
-    setDraftFilters(DEFAULT_FILTERS);
-    resetFilters();
-    updateSearch(newSearch);
-    setHasSearched(true);
-    setMobileFormExpanded(false);
-    beginResultsLoading();
-  };
+  // A date pick behaves like a filter change, not a new search: it applies
+  // instantly and leaves every other filter (price, stops, airlines, times…)
+  // untouched, instead of wiping them the way a "Search" submit does.
+  const handleDateChange = React.useCallback(
+    (date: string, endDate?: string) => {
+      if (!hasSearched) return;
+      if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+      updateSearch({ ...searchState, date, endDate: endDate ?? searchState.endDate });
+      beginResultsLoading();
+    },
+    [hasSearched, searchState, updateSearch, beginResultsLoading]
+  );
 
   // Reference for the virtual list scroll container
   const parentRef = React.useRef<HTMLDivElement>(null);
@@ -272,6 +270,15 @@ export const DashboardView: React.FC = () => {
     updateSearch({ ...searchState, destCity: city });
     beginResultsLoading();
   };
+
+  // Clears the picked destination without touching origin/date/direction or
+  // filters, so an Explore search can step back to the destination grid
+  // instead of restarting the whole search.
+  const handleBackToDestinations = React.useCallback(() => {
+    if (filterDebounceRef.current) clearTimeout(filterDebounceRef.current);
+    updateSearch({ ...searchState, destCity: '' });
+    beginResultsLoading();
+  }, [searchState, updateSearch, beginResultsLoading]);
 
   const originLabel = searchState.originCode === 'LON' ? 'London' : getCityName(searchState.originCode);
   const destLabel = searchState.destCity
@@ -411,38 +418,23 @@ export const DashboardView: React.FC = () => {
                 cabinClass={filters.cabinClass}
                 onCabinChange={(val) => updateFilter('cabinClass', val)}
                 onSearch={handleSearchSubmit}
+                onDateChange={handleDateChange}
                 isSearching={resultsLoading}
               />
-            </div>
-
-            {/* Hint line / example searches below the search bar */}
-            <div className="mt-4 text-center">
-              <span className="text-xs text-muted-foreground">Try searching: </span>
-              <div className="inline-flex flex-wrap gap-2 justify-center mt-1">
-                {exampleSearches.map((example, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleExampleClick(example)}
-                    /* Ghost pill per DESIGN.md — suggestion chips are inactive
-                       chips, not links, so they stay monochrome; blue is
-                       reserved for links / focus / the primary action. */
-                    className="text-xs font-medium text-muted-foreground hover:text-foreground bg-transparent hover:bg-muted border border-border px-3 py-1 rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                  >
-                    {example.label}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
         ) : (
           <>
             {/* 2. Top Search Bar */}
             <section aria-label="Search Controls" className="flex flex-col gap-3">
-              {/* Desktop back-to-hero link (mobile uses the header logo for this) */}
+              {/* Desktop back-to-hero link (mobile uses the header logo for this).
+                  Styled as a real button — border + fill on hover, generous
+                  padding — so it reads as an actionable control, not a caption,
+                  and has a hit area worth aiming for. */}
               <button
                 type="button"
                 onClick={handleBackToSearch}
-                className="hidden sm:inline-flex self-start items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors -mb-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                className="hidden sm:inline-flex self-start items-center gap-1.5 text-xs font-semibold text-foreground bg-secondary hover:bg-muted border border-border transition-colors -mb-1 rounded-md pl-2.5 pr-3 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 Back to search
@@ -510,6 +502,7 @@ export const DashboardView: React.FC = () => {
                   cabinClass={draftFilters.cabinClass}
                   onCabinChange={(val) => handleFilterChange('cabinClass', val)}
                   onSearch={handleSearchSubmit}
+                  onDateChange={handleDateChange}
                   isSearching={resultsLoading}
                 />
               </div>
@@ -528,6 +521,7 @@ export const DashboardView: React.FC = () => {
                 uniqueAirlines={uniqueAirlines}
                 airlinePrices={airlinePrices}
                 medianCo2={medianCo2}
+                isRoundTrip={isRoundTrip}
                 onFilterChange={handleFilterChange}
                 onReset={handleFilterReset}
               />
@@ -537,6 +531,21 @@ export const DashboardView: React.FC = () => {
             <div className="flex flex-col gap-6 items-start">
               {/* Results column */}
               <section className="flex-1 w-full flex flex-col gap-4 overflow-hidden" aria-label="Flight Results">
+                {/* Explore flow only: stepping into a destination's flights
+                    from the "anywhere" grid must not be a dead end — this
+                    steps back to the grid with search state and filters
+                    intact, distinct from the full "Back to search" reset. */}
+                {exploreMode && searchState.destCity && (
+                  <button
+                    type="button"
+                    onClick={handleBackToDestinations}
+                    className="self-start inline-flex items-center gap-1.5 text-xs font-semibold text-foreground bg-secondary hover:bg-muted border border-border transition-colors rounded-md pl-2.5 pr-3 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Back to all destinations
+                  </button>
+                )}
+
                 {/* 4. Stats Summary Card Row */}
                 <StatsBar
                   total={stats.total}
