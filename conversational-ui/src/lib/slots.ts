@@ -28,6 +28,11 @@ export interface SlotJSON {
   weekend?: boolean;
   detail_field?: string | null;
   detail_target?: string | null;
+  /** App-side only (never set by the model): true once a destination has been
+   *  picked from a budget/anywhere search, so the search shows the round trip
+   *  rather than one-way flights. Persists across refinements like the other
+   *  carried slots, until a new search resets it. */
+  round_trip?: boolean;
 }
 
 // The only origin in the dataset is London. These are its airports.
@@ -168,6 +173,7 @@ const CARRYABLE_SLOTS = [
   'flexibility',
   'low_co2',
   'weekend',
+  'round_trip',
 ] as const;
 
 const MODIFIER_CUE =
@@ -198,7 +204,14 @@ export const resolveTurnSlot = (
   const sameDestination = prevDest !== null && nextDest !== null && prevDest === nextDest;
   const destinationIntroduced = hasDestination && !sameDestination;
 
-  if ((destinationIntroduced && !isModifier) || (hasDestination && hasDates && !isModifier)) return next;
+  // A destination picked from a prior budget/anywhere search (no destination
+  // named yet) defaults to round trip: the user is choosing somewhere to
+  // actually go, not just checking one-way fares.
+  const fromExploration = Boolean(prev.anywhere) && !hasValue(prev.destination);
+
+  if ((destinationIntroduced && !isModifier) || (hasDestination && hasDates && !isModifier)) {
+    return fromExploration ? { ...next, round_trip: true } : next;
+  }
 
   const merged: SlotJSON = { ...next, anywhere: false };
   const dropsDirect = isDropDirectQuery(text);
@@ -222,7 +235,7 @@ export const resolveTurnSlot = (
 
 // Map the LLM's slot object onto the existing IntentJSON the filter consumes.
 export const slotToIntent = (slot: SlotJSON): IntentJSON => {
-  const intent: IntentJSON = { direction: 'outbound' };
+  const intent: IntentJSON = { direction: slot.round_trip ? 'both' : 'outbound' };
 
   if (slot.destination && String(slot.destination).trim()) {
     intent.dest_city = String(slot.destination).trim();

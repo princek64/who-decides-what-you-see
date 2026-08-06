@@ -75,7 +75,12 @@ export const MapView: React.FC<{
               onMouseEnter={() => setHovered(p.code)}
               onMouseLeave={() => setHovered(null)}
               onClick={() =>
-                onRefine?.({ dest_city: p.city, dest_code: undefined, layout: 'grid' }, `Flights to ${p.city}`)
+                // Picking a city from an open/budget search means going there and
+                // back, so drill in with both directions rather than one-way only.
+                onRefine?.(
+                  { dest_city: p.city, dest_code: undefined, direction: 'both', layout: 'grid' },
+                  `Flights to ${p.city}`
+                )
               }
             >
               <circle cx={p.xy[0]} cy={p.xy[1]} r={hovered === p.code ? 5 : 3.5} fill={hovered === p.code ? '#ededed' : '#a1a1a1'} />

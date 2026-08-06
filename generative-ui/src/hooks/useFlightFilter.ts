@@ -40,7 +40,10 @@ export interface IntentJSON {
   date?: string;
   date_from?: string;
   date_to?: string;
-  direction?: 'outbound' | 'return';
+  /** 'both' shows outbound AND return legs together (round trip) — used when
+   *  a destination is picked from a budget/anywhere search, since the user is
+   *  choosing somewhere to actually go, not just checking one-way fares. */
+  direction?: 'outbound' | 'return' | 'both';
   max_price?: number;
   stops?: number;
   cabin_class?: string;
@@ -102,11 +105,37 @@ export const resolveDestCodes = (intent: IntentJSON): string[] => {
   return destCodes;
 };
 
+// Round trip: filter each direction on its own terms (destination matching
+// differs for outbound vs return, see step 3 below), then merge and re-sort
+// as one list.
+const sortFlights = (flights: Flight[], sortBy?: IntentJSON['sort_by']): Flight[] => {
+  const by = sortBy || 'cheapest';
+  return [...flights].sort((a, b) => {
+    switch (by) {
+      case 'fastest':
+        return a.duration_mins - b.duration_mins;
+      case 'earliest':
+        return a.departure_mins_from_midnight - b.departure_mins_from_midnight;
+      case 'latest':
+        return b.departure_mins_from_midnight - a.departure_mins_from_midnight;
+      case 'cheapest':
+      default:
+        return a.price_gbp - b.price_gbp;
+    }
+  });
+};
+
 export const filterAndSortFlights = (
   flights: Flight[],
   intent: IntentJSON,
   medianCo2: number
 ): Flight[] => {
+  if (intent.direction === 'both') {
+    const outbound = filterAndSortFlights(flights, { ...intent, direction: 'outbound' }, medianCo2);
+    const inbound = filterAndSortFlights(flights, { ...intent, direction: 'return' }, medianCo2);
+    return sortFlights([...outbound, ...inbound], intent.sort_by);
+  }
+
   let filtered = [...flights];
 
   // 1. Direction (Default: outbound if not mentioned).
@@ -234,22 +263,7 @@ export const filterAndSortFlights = (
   }
 
   // 12. Sorting
-  const sortBy = intent.sort_by || 'cheapest';
-  filtered.sort((a, b) => {
-    switch (sortBy) {
-      case 'fastest':
-        return a.duration_mins - b.duration_mins;
-      case 'earliest':
-        return a.departure_mins_from_midnight - b.departure_mins_from_midnight;
-      case 'latest':
-        return b.departure_mins_from_midnight - a.departure_mins_from_midnight;
-      case 'cheapest':
-      default:
-        return a.price_gbp - b.price_gbp;
-    }
-  });
-
-  return filtered;
+  return sortFlights(filtered, intent.sort_by);
 };
 
 export const useFlightFilter = (
