@@ -17,7 +17,6 @@ export const ChatView: React.FC = () => {
     refineOrigin,
     searchFromLondon,
     clearConversation,
-    toggleExpandMessage,
   } = useChat();
 
   const [inputText, setInputText] = useState('');
@@ -284,7 +283,6 @@ export const ChatView: React.FC = () => {
                       >
                       <ChatBubble
                         message={message}
-                        onToggleExpand={toggleExpandMessage}
                         onRetry={
                           message.role === 'system' &&
                           message.id === lastMessageId &&

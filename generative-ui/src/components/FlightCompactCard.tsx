@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Flight } from '../hooks/useFlightFilter';
+import { bookingHref } from '../lib/utils';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Plane, Leaf } from 'lucide-react';
@@ -37,7 +38,7 @@ export const FlightCompactCard: React.FC<FlightCompactCardProps> = ({ flight, on
   return (
     <Card
       onClick={() => onSelect(flight)}
-      className="w-[280px] h-[180px] shrink-0 p-3.5 flex flex-col justify-between hover:border-white/20 transition-all cursor-pointer bg-card border border-border rounded-lg shadow-none select-none"
+      className="w-[280px] h-[212px] shrink-0 p-3.5 flex flex-col justify-between hover:border-white/20 transition-all cursor-pointer bg-card border border-border rounded-lg shadow-none select-none"
     >
       {/* Top row: Carrier & Status */}
       <div className="flex justify-between items-center text-[10px] text-muted-foreground font-medium">
@@ -108,6 +109,18 @@ export const FlightCompactCard: React.FC<FlightCompactCardProps> = ({ flight, on
           {getDemandBadge()}
         </div>
       </div>
+
+      {/* Booking CTA — a placeholder link; clicking through to book is the
+          expected next step, not an in-app action. */}
+      <a
+        href={bookingHref(flight)}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full text-center text-[11px] font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1.5 transition-colors"
+      >
+        Book on {flight.airline_name}
+      </a>
     </Card>
   );
 };

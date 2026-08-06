@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Flight } from '../../hooks/useFlightFilter';
+import { bookingHref } from '../../lib/utils';
 import { Plane } from 'lucide-react';
 
 // Compact clickable flight row shared by several layouts
@@ -17,10 +18,20 @@ export const FlightRow: React.FC<{
   prefix?: React.ReactNode;
   suffix?: React.ReactNode;
 }> = ({ flight, onSelect, prefix, suffix }) => (
-  <button
-    type="button"
+  // A real <a> for the booking link needs to sit inside this row, and <a> is
+  // not valid content inside a <button>, so the row is a div with a button
+  // role instead (onSelect still opens the detail modal on click/Enter/Space).
+  <div
+    role="button"
+    tabIndex={0}
     onClick={() => onSelect(flight)}
-    className="w-full flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 bg-card border border-border rounded-lg hover:border-white/20 transition-colors text-left"
+    onKeyDown={(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onSelect(flight);
+      }
+    }}
+    className="w-full flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 bg-card border border-border rounded-lg hover:border-white/20 transition-colors text-left cursor-pointer"
   >
     {prefix}
     <div className="w-[120px] shrink-0 min-w-0">
@@ -48,6 +59,15 @@ export const FlightRow: React.FC<{
     <div className="shrink-0 text-right ml-auto sm:ml-0">
       <span className="text-sm font-mono tabular-nums font-semibold text-foreground">£{flight.price_gbp.toFixed(2)}</span>
     </div>
+    <a
+      href={bookingHref(flight)}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1 px-2.5 transition-colors whitespace-nowrap"
+    >
+      Book on {flight.airline_name}
+    </a>
     {suffix}
-  </button>
+  </div>
 );

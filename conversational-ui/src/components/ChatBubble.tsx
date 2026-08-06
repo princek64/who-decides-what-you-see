@@ -7,7 +7,6 @@ import { LONDON_CODES, londonAirportLabel } from '../lib/slots';
 
 interface ChatBubbleProps {
   message: ChatMessage;
-  onToggleExpand: (messageId: string) => void;
   /** Present only on a retryable system notice (rate limit / 5xx): re-sends the
    *  message the failure swallowed. Assistant answers have no retry — see the
    *  footer comment below. */
@@ -116,7 +115,6 @@ const renderInlineBold = (text: string) =>
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
   message,
-  onToggleExpand,
   onRetry,
   onPickOrigin,
   onSearchLondon,
@@ -197,8 +195,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           <FlightProse
             flights={message.flights!}
             intent={message.intent || {}}
-            isExpanded={!!message.isExpanded}
-            onToggleExpand={() => onToggleExpand(message.id)}
             keepStops={Boolean(message.slot?.compare || message.slot?.cheapest_when)}
           />
         </>
