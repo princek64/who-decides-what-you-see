@@ -58,8 +58,17 @@ const Field: React.FC<{ label: string; value: React.ReactNode; wide?: boolean }>
   </div>
 );
 
+// layover_details is "CODE, City, Country, duration" (e.g. "FRA, Frankfurt,
+// Germany, 2h 32m") — the city segment is what belongs in the route line.
+const getStopCity = (flight: Flight): string | null => {
+  if (flight.stops <= 0 || !flight.layover_details) return null;
+  const city = flight.layover_details.split(',')[1]?.trim();
+  return city || null;
+};
+
 const LegSection: React.FC<{ flight: Flight; leg: 'outbound' | 'return' | 'single' }> = ({ flight, leg }) => {
   const isCancelled = flight.flight_status === 'Cancelled';
+  const stopCity = getStopCity(flight);
   return (
     <div className={`border border-border rounded-lg overflow-hidden bg-card ${isCancelled ? 'opacity-75' : ''}`}>
       {/* Leg header */}
@@ -73,7 +82,9 @@ const LegSection: React.FC<{ flight: Flight; leg: 'outbound' | 'return' | 'singl
           {leg === 'single' ? 'Flight' : leg === 'outbound' ? 'Outbound' : 'Return'}
         </span>
         <span className="text-xs text-muted-foreground">
-          {getCityName(flight.origin_code)} ({flight.origin_code}) → {getCityName(flight.dest_code)} ({flight.dest_code}) · {formatLegDate(flight.date)}
+          {getCityName(flight.origin_code)} ({flight.origin_code})
+          {stopCity && ` → ${stopCity}`}
+          {' '}→ {getCityName(flight.dest_code)} ({flight.dest_code}) · {formatLegDate(flight.date)}
         </span>
         <span className="ml-auto flex items-center gap-2">
           <span className="text-[11px] font-mono text-muted-foreground">{flight.flight_number}</span>

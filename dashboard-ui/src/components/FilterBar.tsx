@@ -12,6 +12,9 @@ interface FilterBarProps {
   uniqueAirlines: string[];
   airlinePrices: Record<string, number>;
   medianCo2: number;
+  // Round trips get independent outbound/return time-of-day filters; one-way
+  // searches only ever have an outbound leg, so they keep the single control.
+  isRoundTrip: boolean;
   onFilterChange: <K extends keyof FilterState>(key: K, value: FilterState[K]) => void;
   onReset: () => void;
 }
@@ -53,6 +56,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   uniqueAirlines,
   airlinePrices,
   medianCo2,
+  isRoundTrip,
   onFilterChange,
   onReset,
 }) => {
@@ -79,9 +83,14 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     { value: 'evening', label: 'Evening (18:00 – 23:59)' },
     { value: 'night', label: 'Night (00:00 – 05:59)' },
   ];
-  const timesLabel = filters.departureTime === 'all'
+  const outboundTimeActive = filters.departureTime !== 'all';
+  const returnTimeActive = isRoundTrip && filters.departureTimeReturn !== 'all';
+  const timesActiveCount = (outboundTimeActive ? 1 : 0) + (returnTimeActive ? 1 : 0);
+  const timesLabel = timesActiveCount === 0
     ? 'Times'
-    : `Times · ${TIME_OPTIONS.find((o) => o.value === filters.departureTime)?.label.split(' ')[0]}`;
+    : isRoundTrip
+      ? `Times · ${timesActiveCount}`
+      : `Times · ${TIME_OPTIONS.find((o) => o.value === filters.departureTime)?.label.split(' ')[0]}`;
 
   const moreActiveCount = useMemo(() => {
     let count = 0;
@@ -97,7 +106,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     priceActive ||
     filters.stops !== 'all' ||
     filters.airlines.length > 0 ||
-    filters.departureTime !== 'all' ||
+    timesActiveCount > 0 ||
     moreActiveCount > 0;
 
   return (
@@ -212,25 +221,72 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
       </FilterChip>
 
-      {/* Times */}
-      <FilterChip label={timesLabel} active={filters.departureTime !== 'all'}>
-        <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Departure Time</span>
-        <div className="mt-2 flex flex-col gap-1">
-          {TIME_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onFilterChange('departureTime', opt.value)}
-              className={`text-left text-xs font-medium rounded-md px-2.5 py-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
-                filters.departureTime === opt.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-foreground hover:bg-secondary'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+      {/* Times — round trips get independent outbound/return controls so a
+          search can target e.g. "morning outbound, evening return"; one-way
+          searches only ever have an outbound leg, so they keep one list. */}
+      <FilterChip label={timesLabel} active={timesActiveCount > 0} contentClassName={isRoundTrip ? 'w-72' : undefined}>
+        {isRoundTrip ? (
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Outbound Departure</span>
+              <div className="mt-2 flex flex-col gap-1">
+                {TIME_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onFilterChange('departureTime', opt.value)}
+                    className={`text-left text-xs font-medium rounded-md px-2.5 py-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
+                      filters.departureTime === opt.value
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="border-t border-border pt-3">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Return Departure</span>
+              <div className="mt-2 flex flex-col gap-1">
+                {TIME_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onFilterChange('departureTimeReturn', opt.value)}
+                    className={`text-left text-xs font-medium rounded-md px-2.5 py-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
+                      filters.departureTimeReturn === opt.value
+                        ? 'bg-primary text-primary-foreground'
+                        : 'text-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">Departure Time</span>
+            <div className="mt-2 flex flex-col gap-1">
+              {TIME_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => onFilterChange('departureTime', opt.value)}
+                  className={`text-left text-xs font-medium rounded-md px-2.5 py-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
+                    filters.departureTime === opt.value
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-foreground hover:bg-secondary'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </FilterChip>
 
       {/* All (advanced) filters */}
