@@ -106,3 +106,14 @@
 .animate-flight-takeoff {
   animation: flightTakeoff 2.2s infinite ease-in-out;
 }
+
+/* Typewriter-placeholder caret: a sharp terminal-style on/off blink, not a
+   smooth fade, so it reads as a cursor rather than a pulsing dot. */
+@keyframes caretBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-caret-blink {
+  animation: caretBlink 1s step-end infinite;
+}
