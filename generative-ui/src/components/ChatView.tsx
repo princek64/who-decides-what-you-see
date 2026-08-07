@@ -1,14 +1,22 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useGenChat } from '../hooks/useGenChat';
 import { useSessionLogger } from '../hooks/useSessionLogger';
+import { useTypewriterPlaceholder } from '../hooks/useTypewriterPlaceholder';
 import { GenScreen } from './GenScreen';
 import { FlightDetailModal } from './FlightDetailModal';
 import type { Flight } from '../hooks/useFlightFilter';
 import { Button } from './ui/button';
-import { AlertTriangle, ArrowUp, Search, Trash2, X } from 'lucide-react';
+import { AlertTriangle, PlaneTakeoff, Search, Trash2, X } from 'lucide-react';
 import { FlightSketchLogo } from './FlightSketchLogo';
 import { SearchSteps } from './SearchSteps';
-import { exampleChipDate } from '../constants/prompts';
+
+// Stable module-level reference — an inline array literal as the hook's
+// `examples` prop would recreate on every render and restart the animation.
+const SEARCH_EXAMPLES = [
+  'Cheapest flight to Barcelona',
+  'Weekend trip to Amsterdam under £150',
+  'Compare direct vs connecting flights',
+] as const;
 
 export const ChatView: React.FC = () => {
   const {
@@ -27,6 +35,15 @@ export const ChatView: React.FC = () => {
   const { logCardClick } = useSessionLogger();
 
   const [inputText, setInputText] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  // Animated placeholder runs only while the search bar is empty, unfocused,
+  // and not mid-search — a focused-or-typed-in input is "normal," not a demo.
+  const typewriterActive = inputText === '' && !isSearchFocused && !isLoading;
+  const { text: typedExample, showCaret } = useTypewriterPlaceholder({
+    examples: SEARCH_EXAMPLES,
+    active: typewriterActive,
+  });
 
   const [selectedFlight, setSelectedFlight] = useState<Flight | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -82,7 +99,7 @@ export const ChatView: React.FC = () => {
   };
 
   const searchBar = (
-    <form onSubmit={handleSend} className="flex gap-2.5 items-center w-full">
+    <form onSubmit={handleSend} className="flex gap-2 items-center w-full">
       {messages.length > 0 && (
         <Button
           type="button"
@@ -98,30 +115,48 @@ export const ChatView: React.FC = () => {
       )}
 
       {/* Search pill: single-line query input, not a chat composer */}
-      <div className="flex-1 flex items-center gap-2.5 bg-transparent border border-border rounded-full pl-4 pr-1.5 h-12 focus-within:border-white/30 transition-colors min-w-0">
+      <div className="flex-1 flex items-center gap-2 bg-white/[0.02] border border-white/15 rounded-full pl-4 pr-1.5 h-12 hover:border-white/25 focus-within:border-white/30 focus-within:ring-2 focus-within:ring-ring/40 transition-colors min-w-0">
         <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder={
-            isLoading
-              ? loadingPhase === 'searching'
-                ? 'Searching flights…'
-                : 'Understanding your request…'
-              : "Describe what you're looking for"
-          }
-          aria-label="Describe the flights you're looking for"
-          className="flex-1 bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground min-w-0"
-        />
+        <div className="relative flex-1 min-w-0">
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setIsSearchFocused(false)}
+            placeholder={
+              typewriterActive
+                ? ''
+                : isLoading
+                  ? loadingPhase === 'searching'
+                    ? 'Searching flights…'
+                    : 'Understanding your request…'
+                  : "Describe what you're looking for"
+            }
+            aria-label="Describe the flights you're looking for"
+            className="w-full bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground"
+          />
+          {/* Animated demo placeholder — purely decorative (aria-hidden), so
+              it never reaches screen readers or steals focus/typing from the
+              real input underneath. */}
+          {typewriterActive && (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 flex items-center text-sm text-muted-foreground pointer-events-none select-none truncate"
+            >
+              Search for... {typedExample}
+              {showCaret && <span className="animate-caret-blink">▋</span>}
+            </div>
+          )}
+        </div>
         <button
           type="submit"
           disabled={isLoading || !inputText.trim()}
           title="Search"
-          className="w-9 h-9 rounded-full bg-foreground text-background flex items-center justify-center shrink-0 hover:bg-foreground/90 active:bg-foreground/80 disabled:bg-muted disabled:text-muted-foreground transition-colors"
+          className="w-10 h-10 rounded-full bg-foreground text-background flex items-center justify-center shrink-0 hover:bg-foreground/90 active:bg-foreground/80 disabled:bg-muted disabled:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          <ArrowUp className="w-4 h-4" />
+          <PlaneTakeoff className="w-4.5 h-4.5" />
         </button>
       </div>
     </form>
@@ -166,33 +201,15 @@ export const ChatView: React.FC = () => {
 
         /* ── Empty state: a search page, not a chat greeting ── */
         <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full animate-fade-in">
-          <div className="text-center space-y-2 mb-6 w-full">
-            <h2 className="text-3xl md:text-4xl font-heading font-medium text-foreground tracking-tight">Where do you want to go?</h2>
+          <div className="text-center space-y-2 mb-8 w-full">
+            <h2 className="text-3xl md:text-4xl font-heading font-semibold text-foreground tracking-tight">Where do you want to go?</h2>
             <p className="text-sm text-muted-foreground">Describe a trip and the screen builds itself around the answer.</p>
           </div>
 
-          <div className="w-full flex flex-col gap-3">
+          <div className="w-full flex flex-col">
             {searchBar}
 
-            <div className="flex flex-wrap gap-2 justify-center mt-1">
-              {[
-                `Cheapest direct flight to Barcelona on ${exampleChipDate(7)}`,
-                "Where can I go for £150?",
-                "Compare direct vs connecting to Rome",
-                "Plan a weekend trip to Rome in September"
-              ].map((promptText, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  onClick={() => sendMessage(promptText)}
-                  className="text-xs font-medium text-muted-foreground bg-transparent border-border hover:bg-muted hover:text-foreground rounded-full py-2 px-4 h-auto transition-all"
-                >
-                  {promptText}
-                </Button>
-              ))}
-            </div>
-
-            {disclaimer}
+            <div className="mt-6">{disclaimer}</div>
           </div>
         </div>
       ) : (

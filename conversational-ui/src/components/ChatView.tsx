@@ -1,11 +1,19 @@
 import React, { useRef, useEffect, useLayoutEffect, useState } from 'react';
 import { useChat } from '../hooks/useChat';
+import { useTypewriterPlaceholder } from '../hooks/useTypewriterPlaceholder';
 import { ChatBubble } from './ChatBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { Button } from './ui/button';
-import { ArrowUp, ChevronDown, Trash2 } from 'lucide-react';
+import { PlaneTakeoff, Search, ChevronDown, Trash2 } from 'lucide-react';
 import { FlightSketchLogo } from './FlightSketchLogo';
-import { exampleChipDate } from '../constants/prompts';
+
+// Stable module-level reference — an inline array literal as the hook's
+// `examples` prop would recreate on every render and restart the animation.
+const SEARCH_EXAMPLES = [
+  'Cheapest flight to Barcelona',
+  'Weekend trip to Amsterdam under £150',
+  'Compare direct vs connecting flights',
+] as const;
 
 export const ChatView: React.FC = () => {
   const {
@@ -20,6 +28,15 @@ export const ChatView: React.FC = () => {
   } = useChat();
 
   const [inputText, setInputText] = useState('');
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
+
+  // Animated placeholder runs only while the composer is empty, unfocused,
+  // and not mid-search — a focused-or-typed-in input is "normal," not a demo.
+  const typewriterActive = inputText === '' && !isComposerFocused && !isLoading;
+  const { text: typedExample, showCaret } = useTypewriterPlaceholder({
+    examples: SEARCH_EXAMPLES,
+    active: typewriterActive,
+  });
 
   const [showScrollDown, setShowScrollDown] = useState(false);
 
@@ -163,7 +180,7 @@ export const ChatView: React.FC = () => {
   const lastMessageId = messages[messages.length - 1]?.id;
 
   const composer = (
-    <form onSubmit={handleSend} className="flex gap-2.5 items-end w-full">
+    <form onSubmit={handleSend} className="flex gap-2 items-end w-full">
       {messages.length > 0 && (
         <Button
           type="button"
@@ -178,34 +195,59 @@ export const ChatView: React.FC = () => {
         </Button>
       )}
 
-      {/* Composer pill: auto-growing textarea with the send button inside */}
-      <div className="flex-1 flex items-end gap-2 bg-transparent border border-border rounded-[26px] px-4 py-1.5 focus-within:border-white/30 transition-colors min-w-0">
-        <textarea
-          ref={textareaRef}
-          value={inputText}
-          onChange={(e) => {
-            setInputText(e.target.value);
-            resizeTextarea();
-          }}
-          onKeyDown={handleComposerKeyDown}
-          rows={1}
-          placeholder={
-            isLoading
-              ? loadingPhase === 'searching'
-                ? 'Searching flights… (you can keep typing)'
-                : 'Thinking… (you can keep typing)'
-              : 'Ask me anything about flights…'
-          }
-          aria-label="Message Flight Assistant"
-          className="flex-1 resize-none bg-transparent outline-none text-sm leading-relaxed text-foreground placeholder:text-muted-foreground py-2 max-h-[132px] min-w-0"
-        />
+      {/* Composer pill: auto-growing textarea with the send button inside —
+          same border/pill treatment, leading icon, and vertical rhythm as
+          generative-ui's search bar. min-h-12 (not h-12) gives it the exact
+          same resting height while still letting it grow for multi-line
+          messages; the textarea itself carries no padding of its own so
+          there is only one source of vertical spacing, same as generative-ui's
+          input. */}
+      <div className="flex-1 flex items-center gap-2 bg-white/[0.02] border border-white/15 rounded-full pl-4 pr-1.5 min-h-12 hover:border-white/25 focus-within:border-white/30 focus-within:ring-2 focus-within:ring-ring/40 transition-colors min-w-0">
+        <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+        <div className="relative flex-1 min-w-0 flex items-center">
+          <textarea
+            ref={textareaRef}
+            value={inputText}
+            onChange={(e) => {
+              setInputText(e.target.value);
+              resizeTextarea();
+            }}
+            onKeyDown={handleComposerKeyDown}
+            onFocus={() => setIsComposerFocused(true)}
+            onBlur={() => setIsComposerFocused(false)}
+            rows={1}
+            placeholder={
+              typewriterActive
+                ? ''
+                : isLoading
+                  ? loadingPhase === 'searching'
+                    ? 'Searching flights… (you can keep typing)'
+                    : 'Thinking… (you can keep typing)'
+                  : 'Ask me anything about flights…'
+            }
+            aria-label="Message Flight Assistant"
+            className="w-full resize-none bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground max-h-[132px]"
+          />
+          {/* Animated demo placeholder — purely decorative (aria-hidden), so
+              it never reaches screen readers or steals focus/typing from the
+              real textarea underneath. */}
+          {typewriterActive && (
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 flex items-center text-sm text-muted-foreground pointer-events-none select-none truncate"
+            >
+              Search for... {typedExample}
+              {showCaret && <span className="animate-caret-blink">▋</span>}
+            </div>
+          )}
+        </div>
         <button
           type="submit"
           disabled={isLoading || !inputText.trim()}
           title="Send message"
-          className="w-8 h-8 mb-1 rounded-full bg-foreground text-background flex items-center justify-center shrink-0 hover:bg-foreground/90 active:bg-foreground/80 disabled:bg-muted disabled:text-muted-foreground transition-colors"
+          className="w-10 h-10 rounded-full bg-foreground text-background flex items-center justify-center shrink-0 hover:bg-foreground/90 active:bg-foreground/80 disabled:bg-muted disabled:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
-          <ArrowUp className="w-4 h-4" />
+          <PlaneTakeoff className="w-4.5 h-4.5" />
         </button>
       </div>
     </form>
@@ -255,8 +297,8 @@ export const ChatView: React.FC = () => {
           {/* 1. Empty state: headline above the centred composer. Or the
                  message feed once the thread has started. */}
           {messages.length === 0 ? (
-            <div className="text-center mb-6 w-full">
-              <h2 className="text-3xl md:text-4xl font-heading font-medium text-foreground tracking-tight">
+            <div className="text-center mb-8 w-full">
+              <h2 className="text-3xl md:text-4xl font-heading font-semibold text-foreground tracking-tight">
                 Where do you want to go?
               </h2>
             </div>
@@ -332,34 +374,12 @@ export const ChatView: React.FC = () => {
             : "bg-background border-t border-border p-4 pb-3 sticky bottom-0 z-10 w-full"
           }>
             <div className={messages.length === 0
-              ? "w-full flex flex-col gap-3"
+              ? "w-full flex flex-col"
               : "max-w-4xl mx-auto flex flex-col gap-2 w-full"
             }>
               {composer}
 
-              {/* Suggestion pills under the input box (only visible in empty state) */}
-              {messages.length === 0 && (
-                <div className="flex flex-wrap gap-2 justify-center mt-1">
-                  {[
-                    // Dates are derived from today (clamped to the dataset
-                    // window) so the examples never suggest a past date.
-                    `Cheapest direct flight to Barcelona on ${exampleChipDate(7)}`,
-                    "Flights to Amsterdam this weekend under £100",
-                    `Compare direct vs connecting to Rome on ${exampleChipDate(10)}`
-                  ].map((promptText, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => sendMessage(promptText)}
-                      className="text-[11px] leading-none font-normal text-muted-foreground bg-transparent border border-white/[0.06] hover:border-white/15 hover:text-foreground rounded-full py-1.5 px-2.5 transition-colors"
-                    >
-                      {promptText}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {disclaimer}
+              {messages.length === 0 ? <div className="mt-6">{disclaimer}</div> : disclaimer}
             </div>
           </div>
 
