@@ -33,6 +33,11 @@ export interface SlotJSON {
    *  rather than one-way flights. Persists across refinements like the other
    *  carried slots, until a new search resets it. */
   round_trip?: boolean;
+  /** App-side only (never set by the model): true when the user explicitly
+   *  asked for the return/inbound leg ("return flights to Paris", "flight
+   *  back from Barcelona"). Takes priority over round_trip. Persists across
+   *  refinements like the other carried slots. */
+  return_only?: boolean;
 }
 
 // The only origin in the dataset is London. These are its airports.
@@ -138,6 +143,17 @@ export const isDropDirectQuery = (text: string): boolean =>
 export const isLowCo2Query = (text: string): boolean =>
   /\b(?:low|lower|lowest|less|least|reduce|reduced|greener?|eco)\w*[\s-]*(?:co2\b|co₂|carbon\b|emissions?\b|footprint\b)/i.test(text);
 
+// "return flights to Paris" / "flight back from Barcelona" — the user wants
+// the INBOUND leg specifically, not a round-trip itinerary. Deliberately does
+// NOT match bare "...and come back on 14 July" (no adjacent flight/leg word),
+// which describes a round-trip date range rather than asking for one leg.
+export const isReturnOnlyQuery = (text: string): boolean =>
+  /\breturn\s+flights?\b/i.test(text) ||
+  /\bflights?\s+back\b/i.test(text) ||
+  /\bflying\s+back\b/i.test(text) ||
+  /\b(?:return|inbound)\s+leg\b/i.test(text) ||
+  /\bcoming\s+back\s+flights?\b/i.test(text);
+
 export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON => {
   // "Anywhere" exploration is a destination-suggestion request
   if (!slot.anywhere && !String(slot.destination ?? '').trim() && isAnywhereQuery(text)) {
@@ -155,6 +171,7 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
     slot.direct_only = true;
   }
   if (!slot.low_co2 && isLowCo2Query(text)) slot.low_co2 = true;
+  if (!slot.return_only && isReturnOnlyQuery(text)) slot.return_only = true;
   return slot;
 };
 
@@ -174,6 +191,7 @@ const CARRYABLE_SLOTS = [
   'low_co2',
   'weekend',
   'round_trip',
+  'return_only',
 ] as const;
 
 const MODIFIER_CUE =
@@ -235,7 +253,9 @@ export const resolveTurnSlot = (
 
 // Map the LLM's slot object onto the existing IntentJSON the filter consumes.
 export const slotToIntent = (slot: SlotJSON): IntentJSON => {
-  const intent: IntentJSON = { direction: slot.round_trip ? 'both' : 'outbound' };
+  const intent: IntentJSON = {
+    direction: slot.return_only ? 'return' : slot.round_trip ? 'both' : 'outbound',
+  };
 
   if (slot.destination && String(slot.destination).trim()) {
     intent.dest_city = String(slot.destination).trim();

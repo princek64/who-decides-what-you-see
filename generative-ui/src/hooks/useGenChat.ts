@@ -434,6 +434,23 @@ export const useGenChat = () => {
         intent.weekend = true;
       }
 
+      // "return flight(s)"/"flight(s) back" asks for the INBOUND leg
+      // specifically. The 8B model rarely emits "direction":"return" even
+      // though the schema allows it (no few-shot example ever does) —
+      // backstop it deterministically, same as weekend above. Deliberately
+      // does not match bare "...and come back on 14 July" (no adjacent
+      // flight/leg word), which is round-trip date phrasing, not a
+      // return-leg-only request.
+      if (
+        /\breturn\s+flights?\b/i.test(text) ||
+        /\bflights?\s+back\b/i.test(text) ||
+        /\bflying\s+back\b/i.test(text) ||
+        /\b(?:return|inbound)\s+leg\b/i.test(text) ||
+        /\bcoming\s+back\s+flights?\b/i.test(text)
+      ) {
+        intent.direction = 'return';
+      }
+
       await applyIntent(intent);
     } catch (err: any) {
       console.error('[Groq API Error]', err?.status, err);
