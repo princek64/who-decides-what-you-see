@@ -333,10 +333,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           than occupying its own layout slot. This anchor has zero width, so
           with equal gaps on both sides (the form's `gap-4`) it lands exactly
           on the border between Origin and Destination; the button is then
-          centered on that point and overlaps both fields evenly. Hidden
+          centered on that point and overlaps both fields evenly. `mx-4`
+          adds the same 16px breathing room on each side as the gap-4
+          between every other field pair (e.g. Destination → Dates) — without
+          it the button's own radius exactly consumes the surrounding gap,
+          leaving it flush against both fields with no clearance. Hidden
           below 480px, where the fields stack and there's no shared border to
           sit on (mirrors the fields' own `max-[480px]:basis-full`). */}
-      <div className="relative w-0 h-10 shrink-0 max-[480px]:hidden" aria-hidden="false">
+      <div className="relative w-0 h-10 shrink-0 mx-4 max-[480px]:hidden" aria-hidden="false">
         <button
           type="button"
           onClick={handleSwap}
