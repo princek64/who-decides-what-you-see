@@ -223,14 +223,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     // Enter-to-submit bypasses the disabled button, so re-entry is blocked here too
     if (isSearching) return;
 
-    // A departure date is always required — an empty date would otherwise match
-    // every date in the dataset and flood the results.
-    if (!date) {
-      setDateError('Please select a departure date to search for flights.');
-      return;
-    }
-
-    // Flight data covers H2 2026 only; block out-of-range or past dates
+    // Dates are optional — an empty date runs a bounded Explore-style search
+    // (today through 3 months out; see defaultExploreRange in useFlights.ts)
+    // instead of being blocked. A date that IS provided must still fall
+    // within the bookable range, so these checks stay, guarded so an empty
+    // string (intentionally left blank) never trips them.
     if (date && (date < MIN_DATE || date > DATA_MAX)) {
       setDateError(
         date < MIN_DATE
@@ -240,15 +237,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       return;
     }
     if (direction === 'return') {
-      if (!endDate) {
-        setDateError('Please select a return date to search round-trip flights.');
-        return;
-      }
-      if (endDate < MIN_DATE || endDate > DATA_MAX) {
+      if (endDate && (endDate < MIN_DATE || endDate > DATA_MAX)) {
         setDateError('Return date must be between today and 31 Dec 2026.');
         return;
       }
-      if (date && endDate < date) {
+      if (date && endDate && endDate < date) {
         setDateError('Return date cannot be before the departure date.');
         return;
       }
@@ -340,16 +333,20 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           than occupying its own layout slot. This anchor has zero width, so
           with equal gaps on both sides (the form's `gap-4`) it lands exactly
           on the border between Origin and Destination; the button is then
-          centered on that point and overlaps both fields evenly. Hidden
+          centered on that point and overlaps both fields evenly. `mx-4`
+          adds the same 16px breathing room on each side as the gap-4
+          between every other field pair (e.g. Destination → Dates). Kept
+          small (w-4/h-4) and borderless so it reads as a lightweight icon
+          affordance rather than a third field competing for space. Hidden
           below 480px, where the fields stack and there's no shared border to
           sit on (mirrors the fields' own `max-[480px]:basis-full`). */}
-      <div className="relative w-0 h-10 shrink-0 max-[480px]:hidden" aria-hidden="false">
+      <div className="relative w-0 h-10 shrink-0 mx-4 max-[480px]:hidden" aria-hidden="false">
         <button
           type="button"
           onClick={handleSwap}
           aria-label="Swap origin and destination"
           title="Swap origin and destination"
-          className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-full border border-border bg-card text-foreground shadow-card hover:bg-secondary hover:border-white/20 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-4 h-4 flex items-center justify-center rounded-full bg-card text-foreground shadow-card hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           <ArrowLeftRight className="w-3.5 h-3.5" />
         </button>
