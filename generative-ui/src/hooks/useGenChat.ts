@@ -182,8 +182,14 @@ export const useGenChat = () => {
       }));
 
     const systemPrompt = buildSystemPrompt();
+    // See the matching note in conversational-ui's useChat. The system prompt
+    // is the cacheable prefix and must stay byte-identical across calls,
+    // including retries, so the strict-retry instruction gets its own message
+    // rather than being appended onto the prefix. userHistory stays after it:
+    // it varies per turn, so it can only ever sit outside the cached span.
     const messagesPayload = [
-      { role: 'system' as const, content: isRetry ? `${systemPrompt}\n${STRICT_RETRY_PROMPT}` : systemPrompt },
+      { role: 'system' as const, content: systemPrompt },
+      ...(isRetry ? [{ role: 'system' as const, content: STRICT_RETRY_PROMPT }] : []),
       ...userHistory,
       { role: 'user' as const, content: userMessage },
     ];

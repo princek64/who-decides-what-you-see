@@ -162,8 +162,17 @@ export const useChat = () => {
   // call Groq completions API.
   const callGroq = async (userMessage: string, isRetry = false): Promise<string> => {
     const systemPrompt = buildSystemPrompt();
+    // The system prompt is the cacheable prefix: identical for every call
+    // within a day, first in the array, and far above Groq's minimum
+    // cacheable length. It must stay byte-identical on retries too — this
+    // used to append STRICT_RETRY_PROMPT onto it, which changed the prefix
+    // and forfeited the cache on exactly the calls that had already paid for
+    // one failed round trip. The retry instruction now rides in its own
+    // message after the prefix, so it costs its own few tokens and nothing
+    // more. Content is unchanged; only which message carries it.
     const messagesPayload = [
-      { role: 'system' as const, content: isRetry ? `${systemPrompt}\n${STRICT_RETRY_PROMPT}` : systemPrompt },
+      { role: 'system' as const, content: systemPrompt },
+      ...(isRetry ? [{ role: 'system' as const, content: STRICT_RETRY_PROMPT }] : []),
       { role: 'user' as const, content: userMessage },
     ];
 
