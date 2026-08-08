@@ -223,14 +223,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     // Enter-to-submit bypasses the disabled button, so re-entry is blocked here too
     if (isSearching) return;
 
-    // A departure date is always required — an empty date would otherwise match
-    // every date in the dataset and flood the results.
-    if (!date) {
-      setDateError('Please select a departure date to search for flights.');
-      return;
-    }
-
-    // Flight data covers H2 2026 only; block out-of-range or past dates
+    // Dates are optional — an empty date runs a bounded Explore-style search
+    // (today through 3 months out; see defaultExploreRange in useFlights.ts)
+    // instead of being blocked. A date that IS provided must still fall
+    // within the bookable range, so these checks stay, guarded so an empty
+    // string (intentionally left blank) never trips them.
     if (date && (date < MIN_DATE || date > DATA_MAX)) {
       setDateError(
         date < MIN_DATE
@@ -240,15 +237,11 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       return;
     }
     if (direction === 'return') {
-      if (!endDate) {
-        setDateError('Please select a return date to search round-trip flights.');
-        return;
-      }
-      if (endDate < MIN_DATE || endDate > DATA_MAX) {
+      if (endDate && (endDate < MIN_DATE || endDate > DATA_MAX)) {
         setDateError('Return date must be between today and 31 Dec 2026.');
         return;
       }
-      if (date && endDate < date) {
+      if (date && endDate && endDate < date) {
         setDateError('Return date cannot be before the departure date.');
         return;
       }

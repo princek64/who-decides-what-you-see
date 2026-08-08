@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getCityName } from '../lib/airportMap';
 import { useSessionLogger } from './useSessionLogger';
 
@@ -109,8 +109,41 @@ export function computeDatePrices(
   return prices;
 }
 
+// Flight data covers H2 2026 only — the same ceiling SearchBar enforces on
+// the date picker.
+const DATA_MAX = '2026-12-31';
+
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// When a search's date (or, for a round trip, its return date) is left
+// blank, filtering falls back to this bounded window — today through 3
+// months out, clamped to the dataset's last day — rather than matching
+// every date in the dataset. This is an internal filtering default only:
+// it never touches searchState.date/endDate, so the date picker still
+// honestly shows the field as unset.
+function defaultExploreRange(): { start: string; end: string } {
+  const start = todayKey();
+  const endDate = new Date();
+  endDate.setMonth(endDate.getMonth() + 3);
+  const end = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+  return { start, end: end > DATA_MAX ? DATA_MAX : end };
+}
+
 export function useFlights() {
   const { logFilterChange } = useSessionLogger();
+  // Computed once per session — "today" doesn't meaningfully change within one.
+  const exploreRange = useMemo(() => defaultExploreRange(), []);
+
+  // A blank date/endDate matches the bounded Explore window instead of every
+  // date in the dataset; a filled-in one still matches exactly as before.
+  const matchesDate = useCallback(
+    (flightDate: string, exact: string | undefined) =>
+      exact ? flightDate === exact : flightDate >= exploreRange.start && flightDate <= exploreRange.end,
+    [exploreRange]
+  );
 
   const [rawFlights, setRawFlights] = useState<Flight[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -240,25 +273,25 @@ export function useFlights() {
           const cityName = getCityName(flight.dest_code).toLowerCase();
           if (!cityName.includes(searchState.destCity.toLowerCase())) return false;
         }
-        if (searchState.date && flight.date !== searchState.date) return false;
+        if (!matchesDate(flight.date, searchState.date)) return false;
       } else {
-        const isOutboundLeg = 
+        const isOutboundLeg =
           flight.direction === 'outbound' &&
           (searchState.originCode === 'LON' || flight.origin_code === searchState.originCode) &&
           (!searchState.destCity || getCityName(flight.dest_code).toLowerCase().includes(searchState.destCity.toLowerCase())) &&
-          (!searchState.date || flight.date === searchState.date);
-          
-        const isReturnLeg = 
+          matchesDate(flight.date, searchState.date);
+
+        const isReturnLeg =
           flight.direction === 'return' &&
           (searchState.originCode === 'LON' || flight.dest_code === searchState.originCode) &&
           (!searchState.destCity || getCityName(flight.origin_code).toLowerCase().includes(searchState.destCity.toLowerCase())) &&
-          (!searchState.endDate || flight.date === searchState.endDate);
-          
+          matchesDate(flight.date, searchState.endDate);
+
         if (!isOutboundLeg && !isReturnLeg) return false;
       }
       return true;
     });
-  }, [rawFlights, searchState]);
+  }, [rawFlights, searchState, matchesDate]);
 
   // Get list of all unique airlines matching the route search, sorted by flight count frequency
   const uniqueAirlines = useMemo(() => {
@@ -304,21 +337,21 @@ export function useFlights() {
           if (!cityName.includes(searchState.destCity.toLowerCase())) return false;
         }
 
-        // Date match
-        if (searchState.date && flight.date !== searchState.date) return false;
+        // Date match — blank date falls back to the bounded Explore window
+        if (!matchesDate(flight.date, searchState.date)) return false;
       } else {
         // Round trip: Can match outbound leg (start date) OR return leg (end date)
-        const isOutboundLeg = 
+        const isOutboundLeg =
           flight.direction === 'outbound' &&
           (searchState.originCode === 'LON' || flight.origin_code === searchState.originCode) &&
           (!searchState.destCity || getCityName(flight.dest_code).toLowerCase().includes(searchState.destCity.toLowerCase())) &&
-          (!searchState.date || flight.date === searchState.date);
-          
-        const isReturnLeg = 
+          matchesDate(flight.date, searchState.date);
+
+        const isReturnLeg =
           flight.direction === 'return' &&
           (searchState.originCode === 'LON' || flight.dest_code === searchState.originCode) &&
           (!searchState.destCity || getCityName(flight.origin_code).toLowerCase().includes(searchState.destCity.toLowerCase())) &&
-          (!searchState.endDate || flight.date === searchState.endDate);
+          matchesDate(flight.date, searchState.endDate);
           
         if (!isOutboundLeg && !isReturnLeg) return false;
       }
@@ -389,7 +422,7 @@ export function useFlights() {
 
       return true;
     });
-  }, [rawFlights, searchState, filters, medianCo2]);
+  }, [rawFlights, searchState, filters, medianCo2, matchesDate]);
 
   // Sorting logic with performance guard
   const sortedFlights = useMemo(() => {
