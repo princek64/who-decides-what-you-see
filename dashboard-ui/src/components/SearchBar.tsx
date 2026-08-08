@@ -335,9 +335,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           on the border between Origin and Destination; the button is then
           centered on that point and overlaps both fields evenly. `mx-4`
           adds the same 16px breathing room on each side as the gap-4
-          between every other field pair (e.g. Destination → Dates) — without
-          it the button's own radius exactly consumes the surrounding gap,
-          leaving it flush against both fields with no clearance. Hidden
+          between every other field pair (e.g. Destination → Dates). Kept
+          small (w-4/h-4) and borderless so it reads as a lightweight icon
+          affordance rather than a third field competing for space. Hidden
           below 480px, where the fields stack and there's no shared border to
           sit on (mirrors the fields' own `max-[480px]:basis-full`). */}
       <div className="relative w-0 h-10 shrink-0 mx-4 max-[480px]:hidden" aria-hidden="false">
@@ -346,7 +346,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
           onClick={handleSwap}
           aria-label="Swap origin and destination"
           title="Swap origin and destination"
-          className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-8 h-8 flex items-center justify-center rounded-full border border-border bg-card text-foreground shadow-card hover:bg-secondary hover:border-white/20 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-4 h-4 flex items-center justify-center rounded-full bg-card text-foreground shadow-card hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           <ArrowLeftRight className="w-3.5 h-3.5" />
         </button>
