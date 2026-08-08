@@ -10,7 +10,8 @@ const groq = new Groq({ apiKey });
 
 for (const msg of process.argv.slice(2)) {
   const c = await groq.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
+    model: 'openai/gpt-oss-20b',
+    reasoning_effort: 'low',
     messages: [
       { role: 'system', content: buildSystemPrompt() },
       { role: 'user', content: msg },

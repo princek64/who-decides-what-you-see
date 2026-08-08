@@ -1,6 +1,6 @@
 # Flight Assistant - Conversational UI Research Prototype
 
-This is the conversational UI flight search interface developed for the MA dissertation research project comparing user search paradigms. It utilizes React, Vite, TypeScript, Tailwind CSS, and integrates with the Groq API (using the `llama-3.1-8b-instant` model) to extract structured search intents from natural language input.
+This is the conversational UI flight search interface developed for the MA dissertation research project comparing user search paradigms. It utilizes React, Vite, TypeScript, Tailwind CSS, and integrates with the Groq API (using the `openai/gpt-oss-20b` model) to extract structured search intents from natural language input.
 
 ## Setup
 

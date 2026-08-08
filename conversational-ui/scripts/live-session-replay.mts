@@ -62,7 +62,8 @@ const askModel = async (q: string): Promise<SlotJSON> => {
   for (let attempt = 0; ; attempt++) {
     try {
       const c = await groq.chat.completions.create({
-        model: 'llama-3.1-8b-instant',
+        model: 'openai/gpt-oss-20b',
+        reasoning_effort: 'low',
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: q }],
         temperature: 0, max_tokens: 400,
       });

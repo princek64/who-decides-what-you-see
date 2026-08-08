@@ -168,10 +168,18 @@ export const useChat = () => {
     ];
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'openai/gpt-oss-20b',
       messages: messagesPayload,
       temperature: 0,
       max_tokens: 400,
+      // gpt-oss-20b is a reasoning model, and its reasoning tokens are
+      // charged against max_tokens before any answer is emitted. At the
+      // default effort they consumed the whole budget on longer queries
+      // ("You have £150 and a free weekend..."), so the reply came back
+      // empty with finish_reason "length" and the JSON parse failed. Low
+      // effort holds reasoning to ~10-60 tokens, leaving the existing
+      // budget for the JSON payload itself.
+      reasoning_effort: 'low',
     });
 
     return completion.choices[0]?.message?.content ?? '';

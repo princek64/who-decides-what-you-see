@@ -76,7 +76,8 @@ for (const c of cases) {
   let raw = '';
   try {
     const res = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'openai/gpt-oss-20b',
+      reasoning_effort: 'low',
       temperature: 0.1,
       max_tokens: 300,
       messages: [

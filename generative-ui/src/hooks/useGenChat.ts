@@ -189,10 +189,15 @@ export const useGenChat = () => {
     ];
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'openai/gpt-oss-20b',
       messages: messagesPayload,
       temperature: 0.1,
       max_tokens: 300,
+      // See the matching note in conversational-ui's useChat: gpt-oss-20b
+      // spends reasoning tokens out of max_tokens, and at default effort it
+      // exhausted this 300-token budget before emitting any JSON. Low effort
+      // keeps reasoning small enough that the layout JSON always fits.
+      reasoning_effort: 'low',
     });
 
     return completion.choices[0]?.message?.content ?? '';
