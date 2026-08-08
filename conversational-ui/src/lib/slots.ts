@@ -206,7 +206,18 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
   }
   if (!slot.low_co2 && isLowCo2Query(text)) slot.low_co2 = true;
   if (!slot.round_trip && isRoundTripQuery(text)) slot.round_trip = true;
-  if (!slot.return_only && isReturnOnlyQuery(text)) slot.return_only = true;
+  if (isReturnOnlyQuery(text)) {
+    slot.return_only = true;
+    // gpt-oss-20b classifies several return-leg phrasings as off_topic — even
+    // unambiguous ones carrying a destination and a date ("I need a flight
+    // back from Barcelona on 20 September"). off_topic short-circuits ahead of
+    // everything else (resolveTurnSlot returns immediately on it, and
+    // handleParsedSlot answers with the off-topic message before any slot is
+    // read), so setting return_only alone could never take effect. The wording
+    // this regex matches is a flight request by definition, so clear the flag
+    // here — the one point that runs before both short-circuits.
+    slot.off_topic = false;
+  }
   return slot;
 };
 
