@@ -41,6 +41,7 @@ const DEFAULT_SEARCH_STATE: SearchState = {
 export const DashboardView: React.FC = () => {
   const {
     flights,
+    filteredFlights,
     rawFlights,
     totalFilteredCount,
     isLoading,
@@ -236,22 +237,43 @@ export const DashboardView: React.FC = () => {
   const hasResults = resultCount > 0;
 
   // Groups results by destination city for an anywhere (no-destination) search.
+  // Built from filteredFlights (the full route/filter match), NOT the capped
+  // `flights`/roundTripPairs used to render rows and itineraries. Both of
+  // those caps (sortedFlights' 2000-row cap, roundTripPairs'
+  // PAIR_OUTBOUND_CAP) exist to bound what gets drawn on screen, not which
+  // cities are reachable — and over a wide date window (e.g. the no-date
+  // Explore default) the same handful of popular routes repeat across many
+  // dates, filling those caps entirely and hiding cities that only fly
+  // occasionally. This is a cheap O(n) aggregation (grouping by city), not a
+  // render, so scanning the uncapped list here is fine. PAIR_RETURNS_PER_OUTBOUND
+  // still caps how many return candidates are checked per outbound leg; that
+  // only affects count/cheapest precision, not which cities appear.
   const destinationGroups = React.useMemo(() => {
     if (searchState.destCity) return [];
     const map = new Map<string, { code: string; city: string; count: number; cheapest: number }>();
     if (isRoundTrip) {
-      for (const { out, ret } of roundTripPairs) {
-        const total = out.price_gbp + ret.price_gbp;
-        const entry = map.get(out.dest_code);
-        if (entry) {
-          entry.count++;
-          if (total < entry.cheapest) entry.cheapest = total;
-        } else {
-          map.set(out.dest_code, { code: out.dest_code, city: getCityName(out.dest_code), count: 1, cheapest: total });
+      const returnsByAirport: Record<string, Flight[]> = {};
+      for (const f of filteredFlights) {
+        if (f.direction === 'return') (returnsByAirport[f.origin_code] ||= []).push(f);
+      }
+      for (const out of filteredFlights) {
+        if (out.direction !== 'outbound') continue;
+        const candidates = returnsByAirport[out.dest_code];
+        if (!candidates) continue;
+        for (const ret of candidates.slice(0, PAIR_RETURNS_PER_OUTBOUND)) {
+          const total = out.price_gbp + ret.price_gbp;
+          if (total < filters.priceRange[0] || total > filters.priceRange[1]) continue;
+          const entry = map.get(out.dest_code);
+          if (entry) {
+            entry.count++;
+            if (total < entry.cheapest) entry.cheapest = total;
+          } else {
+            map.set(out.dest_code, { code: out.dest_code, city: getCityName(out.dest_code), count: 1, cheapest: total });
+          }
         }
       }
     } else {
-      for (const f of flights) {
+      for (const f of filteredFlights) {
         if (f.direction !== 'outbound') continue;
         const entry = map.get(f.dest_code);
         if (entry) {
@@ -263,7 +285,7 @@ export const DashboardView: React.FC = () => {
       }
     }
     return Array.from(map.values()).sort((a, b) => a.cheapest - b.cheapest);
-  }, [searchState.destCity, isRoundTrip, roundTripPairs, flights]);
+  }, [searchState.destCity, isRoundTrip, filteredFlights, filters.priceRange]);
   const showDestinationGrid = !searchState.destCity && destinationGroups.length > 0;
 
   const handleDestinationSelect = (city: string) => {

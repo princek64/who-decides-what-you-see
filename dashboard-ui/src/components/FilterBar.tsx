@@ -208,15 +208,17 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
         <Slider
           value={[filters.priceRange[1]]}
+          min={50}
           max={1500}
-          // £5 steps: £20 made common round budgets (£150, £250) unreachable —
-          // the slider snapped to £140/£160 either side of them.
-          step={5}
+          // A £0 max is meaningless (it can only ever match nothing), so £50
+          // is the floor as well as the step — every snap point is a usable
+          // budget.
+          step={50}
           onValueChange={(val) => onFilterChange('priceRange', [0, val[0]])}
           className="mt-3"
         />
         <div className="flex justify-between text-[10px] text-muted-foreground font-mono tabular-nums mt-1">
-          <span>£0</span>
+          <span>£50</span>
           <span>£1,500</span>
         </div>
       </FilterChip>

@@ -4,7 +4,6 @@ import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 import { Plane, Users, Leaf } from 'lucide-react';
 import { getCityName } from '../lib/airportMap';
-import { StatusLabel } from './StatusLabel';
 
 interface FlightCardProps {
   flight: Flight;
@@ -22,11 +21,6 @@ export const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect, style 
       ? flight.date
       : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   })();
-
-  // Status is a quiet text label, not a filled pill: normal states (Scheduled /
-  // On time) are grey with no colour; only the exceptions carry a coloured dot —
-  // amber for Delayed, red for Cancelled (Google Flights-style restraint).
-  const getStatusBadge = () => <StatusLabel status={flight.flight_status} />;
 
   // Demand badges stay monochrome; only "Filling Fast" earns an accent (amber),
   // matching the chat apps' compact card. The word "Demand" is dropped below sm
@@ -91,7 +85,6 @@ export const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect, style 
             <Badge className="hidden sm:inline-flex bg-secondary text-muted-foreground border-transparent hover:bg-secondary text-[10px] font-medium">
               {flight.direction === 'outbound' ? 'Outbound' : 'Return'}
             </Badge>
-            {getStatusBadge()}
           </div>
         </div>
 

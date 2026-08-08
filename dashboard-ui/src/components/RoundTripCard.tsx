@@ -2,7 +2,6 @@ import React from 'react';
 import type { Flight } from '../hooks/useFlights';
 import { Card } from './ui/card';
 import { Plane, PlaneTakeoff, PlaneLanding } from 'lucide-react';
-import { StatusLabel } from './StatusLabel';
 
 interface RoundTripCardProps {
   outbound: Flight;
@@ -78,11 +77,6 @@ const LegRow: React.FC<{
             <div className="text-[10px] font-mono font-medium text-muted-foreground">{flight.dest_code}</div>
           </div>
         </div>
-      </div>
-
-      {/* Status */}
-      <div className="hidden sm:flex flex-col items-end shrink-0">
-        <StatusLabel status={flight.flight_status} />
       </div>
     </div>
   );
