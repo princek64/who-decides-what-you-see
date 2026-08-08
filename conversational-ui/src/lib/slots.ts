@@ -29,9 +29,10 @@ export interface SlotJSON {
   detail_field?: string | null;
   detail_target?: string | null;
   /** App-side only (never set by the model): true once a destination has been
-   *  picked from a budget/anywhere search, so the search shows the round trip
-   *  rather than one-way flights. Persists across refinements like the other
-   *  carried slots, until a new search resets it. */
+   *  picked from a budget/anywhere search, or the user said "return flight(s)"
+   *  / "round trip" explicitly, so the search shows both directions rather
+   *  than one-way flights. Persists across refinements like the other carried
+   *  slots, until a new search resets it. */
   round_trip?: boolean;
   /** App-side only (never set by the model): true when the user explicitly
    *  asked for the return/inbound leg ("return flights to Paris", "flight
@@ -104,6 +105,15 @@ export const SLOT_QUESTIONS: Record<'destination' | 'dates', string> = {
   dates: 'Which dates?',
 };
 
+// A round trip needs a different dates question up front: it states both
+// valid answer shapes (one day, or an outbound+return pair) in a single turn
+// so the user doesn't need a follow-up clarifying exchange to figure out
+// which one we meant.
+export const datesQuestionFor = (slot: SlotJSON): string =>
+  slot.round_trip || slot.return_only
+    ? 'Which dates? A single day shows flights both ways — or give an outbound and return date, like "30 August out, 3 September back."'
+    : SLOT_QUESTIONS.dates;
+
 
 // Open-ended "where could I go" exploration.
 export const isAnywhereQuery = (text: string): boolean =>
@@ -143,18 +153,42 @@ export const isDropDirectQuery = (text: string): boolean =>
 export const isLowCo2Query = (text: string): boolean =>
   /\b(?:low|lower|lowest|less|least|reduce|reduced|greener?|eco)\w*[\s-]*(?:co2\b|co₂|carbon\b|emissions?\b|footprint\b)/i.test(text);
 
-// "return flights to Paris" / "flight back from Barcelona" — the user wants
-// the INBOUND leg specifically, not a round-trip itinerary. Deliberately does
-// NOT match bare "...and come back on 14 July" (no adjacent flight/leg word),
-// which describes a round-trip date range rather than asking for one leg.
-export const isReturnOnlyQuery = (text: string): boolean =>
+// "return flights to Barcelona" / "round trip to Rome" — in everyday English
+// (especially UK English, where this app is set) "return flight(s)" as a bare
+// noun phrase means a ROUND TRIP ticket, not "just the leg back." Show both
+// directions, same as picking a city from a budget/anywhere search.
+export const isRoundTripQuery = (text: string): boolean =>
   /\breturn\s+flights?\b/i.test(text) ||
+  /\bround[- ]trip\b/i.test(text) ||
+  /\bthere\s+and\s+back\b/i.test(text);
+
+// "flight back from Barcelona" / "the return leg" — unlike bare "return
+// flight(s)" above, these specifically single out the INBOUND leg only.
+// Deliberately does NOT match bare "...and come back on 14 July" (no adjacent
+// flight/leg word), which describes a round-trip date range, not one leg.
+export const isReturnOnlyQuery = (text: string): boolean =>
   /\bflights?\s+back\b/i.test(text) ||
   /\bflying\s+back\b/i.test(text) ||
   /\b(?:return|inbound)\s+leg\b/i.test(text) ||
   /\bcoming\s+back\s+flights?\b/i.test(text);
 
+// A bare price correction/follow-up ("12 pounds?", "sorry, 120 pounds", "£90")
+// — carries no date information at all. The 8B model sometimes still echoes a
+// date range from a nearby few-shot example that happens to share the same
+// price figure (e.g. the "...for under £120" example) rather than leaving
+// dates null as instructed. Force dates back to null so the app's own
+// carry-forward logic (resolveTurnSlot) keeps whatever date was already
+// established, instead of trusting the model's hallucinated range.
+export const isPriceOnlyQuery = (text: string): boolean =>
+  /^\s*(?:sorry,?\s*|ok(?:ay)?,?\s*|actually,?\s*)?£?\s*\d+(?:\.\d+)?\s*(?:pounds?|gbp|quid)?\s*[.!?]?\s*$/i.test(
+    text
+  );
+
 export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON => {
+  if (isPriceOnlyQuery(text)) {
+    slot.date_from = null;
+    slot.date_to = null;
+  }
   // "Anywhere" exploration is a destination-suggestion request
   if (!slot.anywhere && !String(slot.destination ?? '').trim() && isAnywhereQuery(text)) {
     slot.anywhere = true;
@@ -171,6 +205,7 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
     slot.direct_only = true;
   }
   if (!slot.low_co2 && isLowCo2Query(text)) slot.low_co2 = true;
+  if (!slot.round_trip && isRoundTripQuery(text)) slot.round_trip = true;
   if (!slot.return_only && isReturnOnlyQuery(text)) slot.return_only = true;
   return slot;
 };
@@ -190,6 +225,8 @@ const CARRYABLE_SLOTS = [
   'flexibility',
   'low_co2',
   'weekend',
+  'compare',
+  'cheapest_when',
   'round_trip',
   'return_only',
 ] as const;

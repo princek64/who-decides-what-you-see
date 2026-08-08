@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Groq from 'groq-sdk';
 import { buildSystemPrompt, STRICT_RETRY_PROMPT, MODEL_LAYOUTS } from '../constants/prompts';
 import type { Layout } from '../constants/prompts';
-import { filterAndSortFlights, resolveDestCodes } from './useFlightFilter';
+import { filterAndSortFlights, resolveDestCodes, isRoundTripItinerary } from './useFlightFilter';
 import type { Flight, IntentJSON } from './useFlightFilter';
 import { getCityName } from '../lib/airportMap';
 import { formatFlightDate } from '../lib/utils';
@@ -125,10 +125,16 @@ export const useGenChat = () => {
     if (intent.date) {
       dateInfo = ` on ${formatFlightDate(intent.date)}`;
     } else if (intent.date_from && intent.date_to) {
-      dateInfo =
-        intent.date_from === intent.date_to
-          ? ` on ${formatFlightDate(intent.date_from)}`
-          : ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
+      if (intent.date_from === intent.date_to) {
+        dateInfo = ` on ${formatFlightDate(intent.date_from)}`;
+      } else if (isRoundTripItinerary(intent)) {
+        // Two close-together dates on a round trip are an outbound/return
+        // pair, not a flexible window — say so plainly rather than "between
+        // X and Y".
+        dateInfo = ` — outbound ${formatFlightDate(intent.date_from)}, return ${formatFlightDate(intent.date_to)}`;
+      } else {
+        dateInfo = ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
+      }
     }
     const base = `Found ${count} ${stopInfo}flight${count === 1 ? '' : 's'}${destInfo}${priceInfo}${timeInfo}${weekendInfo}${dateInfo}`;
     switch (layout) {
@@ -434,15 +440,25 @@ export const useGenChat = () => {
         intent.weekend = true;
       }
 
-      // "return flight(s)"/"flight(s) back" asks for the INBOUND leg
-      // specifically. The 8B model rarely emits "direction":"return" even
-      // though the schema allows it (no few-shot example ever does) —
-      // backstop it deterministically, same as weekend above. Deliberately
+      // "return flight(s)"/"round trip" as a bare phrase means a ROUND TRIP
+      // ticket in everyday (especially UK) English, not "just the leg back" —
+      // show both directions, same as picking a city from a budget/anywhere
+      // search. Backstopped deterministically since the 8B model doesn't
+      // reliably emit "direction":"return" or compose it with 'both' either.
+      if (
+        /\breturn\s+flights?\b/i.test(text) ||
+        /\bround[- ]trip\b/i.test(text) ||
+        /\bthere\s+and\s+back\b/i.test(text)
+      ) {
+        intent.direction = 'both';
+      }
+
+      // "flight(s) back"/"the return leg" specifically single out the
+      // INBOUND leg only — unlike bare "return flight(s)" above. Deliberately
       // does not match bare "...and come back on 14 July" (no adjacent
       // flight/leg word), which is round-trip date phrasing, not a
       // return-leg-only request.
       if (
-        /\breturn\s+flights?\b/i.test(text) ||
         /\bflights?\s+back\b/i.test(text) ||
         /\bflying\s+back\b/i.test(text) ||
         /\b(?:return|inbound)\s+leg\b/i.test(text) ||

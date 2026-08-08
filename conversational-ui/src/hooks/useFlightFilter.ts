@@ -123,12 +123,51 @@ const sortFlights = (flights: Flight[], sortBy?: IntentJSON['sort_by']): Flight[
   });
 };
 
+// A round trip with two distinct dates close enough together to be a real
+// trip (not a flexible search window like "in September") means the FIRST
+// date is the outbound leg and the SECOND is the return leg — not "search
+// both directions across the whole span." Flexible windows ("in September" ≈
+// 30 days, "next 3 months" ≈ 90 days) are comfortably longer than any real
+// trip, so a day-span cap is enough to tell the two apart without a new
+// explicit flag from the model.
+const MAX_ITINERARY_SPAN_DAYS = 21;
+
+const daySpan = (from: string, to: string): number => {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / msPerDay);
+};
+
+export const isRoundTripItinerary = (intent: IntentJSON): boolean =>
+  intent.direction === 'both' &&
+  !!intent.date_from &&
+  !!intent.date_to &&
+  intent.date_from !== intent.date_to &&
+  daySpan(intent.date_from, intent.date_to) > 0 &&
+  daySpan(intent.date_from, intent.date_to) <= MAX_ITINERARY_SPAN_DAYS;
+
 export const filterAndSortFlights = (
   flights: Flight[],
   intent: IntentJSON,
   medianCo2: number
 ): Flight[] => {
   if (intent.direction === 'both') {
+    // Two distinct, close-together dates: pin outbound to the first date and
+    // return to the second, reusing the exact-single-date path (`intent.date`
+    // already takes priority over the date_from/date_to range below).
+    if (isRoundTripItinerary(intent)) {
+      const outbound = filterAndSortFlights(
+        flights,
+        { ...intent, direction: 'outbound', date: intent.date_from },
+        medianCo2
+      );
+      const inbound = filterAndSortFlights(
+        flights,
+        { ...intent, direction: 'return', date: intent.date_to },
+        medianCo2
+      );
+      return sortFlights([...outbound, ...inbound], intent.sort_by);
+    }
+
     const outbound = filterAndSortFlights(flights, { ...intent, direction: 'outbound' }, medianCo2);
     const inbound = filterAndSortFlights(flights, { ...intent, direction: 'return' }, medianCo2);
     return sortFlights([...outbound, ...inbound], intent.sort_by);

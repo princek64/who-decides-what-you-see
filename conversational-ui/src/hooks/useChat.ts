@@ -7,6 +7,7 @@ import { getCityName } from '../lib/airportMap';
 import {
   applyWordingBackstops,
   classifyOrigin,
+  datesQuestionFor,
   firstMissingRequiredSlot,
   londonAirportLabel,
   resolveTurnSlot,
@@ -235,7 +236,8 @@ export const useChat = () => {
     // Explicit slot-filling (app decides, not the model)
     const missing = firstMissingRequiredSlot(slot);
     if (missing) {
-      pushAssistant({ text: SLOT_QUESTIONS[missing], slot, awaitingSlot: missing });
+      const text = missing === 'dates' ? datesQuestionFor(slot) : SLOT_QUESTIONS[missing];
+      pushAssistant({ text, slot, awaitingSlot: missing });
       return;
     }
 

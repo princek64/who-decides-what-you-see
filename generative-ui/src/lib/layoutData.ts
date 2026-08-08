@@ -1,5 +1,5 @@
 import type { Flight, IntentJSON } from '../hooks/useFlightFilter';
-import { filterAndSortFlights } from '../hooks/useFlightFilter';
+import { filterAndSortFlights, isRoundTripItinerary } from '../hooks/useFlightFilter';
 import { getCityName, getCityCountry } from './airportMap';
 
 // ─── Pure data adapters for the generative layouts ───
@@ -147,6 +147,26 @@ export const buildItinerary = (
   intent: IntentJSON,
   medianCo2: number
 ): ItineraryPair | null => {
+  // Two explicit, close-together dates ("30 August out, 3 September back")
+  // are a real itinerary, not a window to search for the cheapest pairing
+  // within — pin each leg to its own exact date, same as the plain
+  // both-directions search does, so the answer text and the itinerary card
+  // never disagree about which dates were actually searched.
+  if (isRoundTripItinerary(intent)) {
+    const outbound = filterAndSortFlights(
+      rawFlights,
+      { ...intent, direction: 'outbound', date: intent.date_from },
+      medianCo2
+    );
+    const returns = filterAndSortFlights(
+      rawFlights,
+      { ...intent, direction: 'return', date: intent.date_to },
+      medianCo2
+    );
+    if (outbound.length === 0 || returns.length === 0) return null;
+    return { out: outbound[0], ret: returns[0], nights: nightsBetween(outbound[0].date, returns[0].date) };
+  }
+
   let outbound = filterAndSortFlights(rawFlights, { ...intent, direction: 'outbound' }, medianCo2);
   let returns = filterAndSortFlights(rawFlights, { ...intent, direction: 'return' }, medianCo2);
 

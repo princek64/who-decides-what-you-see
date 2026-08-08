@@ -50,49 +50,63 @@ export const cheapestBy = (pool: Flight[]): Flight | null => {
  * so the quoted figures and the panel's Min Price cannot disagree: the panel's
  * minimum is by definition the cheaper of the two flights quoted here.
  */
+// Returns short, single-idea paragraphs (verdict, then why, then the two
+// options) joined by blank lines — rendered as separate <p> tags — instead of
+// one dense multi-clause sentence. Every figure still comes straight off the
+// SAME `results` array the cards/table render from; only the prose shape
+// changed, not the numbers.
 export const buildComparisonSentence = (results: Flight[], destLabel: string): string | null => {
   const direct = cheapestBy(results.filter((f) => f.stops === 0));
   const connecting = cheapestBy(results.filter((f) => f.stops >= 1));
   const dest = destLabel ? ` to ${destLabel}` : '';
   if (!direct && !connecting) return null;
   if (direct && !connecting) {
-    return `Only direct flights${dest} are available — the cheapest is £${direct.price_gbp.toFixed(2)} (${direct.duration_formatted}). No connecting option to compare.`;
+    return (
+      `Only direct flights${dest} are available.\n\n` +
+      `Cheapest is £${direct.price_gbp.toFixed(2)} (${direct.duration_formatted}). No connecting option to compare.`
+    );
   }
   if (connecting && !direct) {
-    return `Only connecting flights${dest} are available — the cheapest is £${connecting.price_gbp.toFixed(2)} (${connecting.duration_formatted}). No direct option to compare.`;
+    return (
+      `Only connecting flights${dest} are available.\n\n` +
+      `Cheapest is £${connecting.price_gbp.toFixed(2)} (${connecting.duration_formatted}). No direct option to compare.`
+    );
   }
   const d = direct!;
   const c = connecting!;
   const priceGap = d.price_gbp - c.price_gbp; // + => direct dearer
   const timeGap = c.duration_mins - d.duration_mins; // + => connecting slower
-  const lead =
-    `Cheapest direct${dest} is £${d.price_gbp.toFixed(2)} (${d.duration_formatted}); ` +
-    `cheapest with a stop is £${c.price_gbp.toFixed(2)} (${c.duration_formatted}). `;
 
   let tradeoff: string;
   if (priceGap > 0 && timeGap > 0) {
-    tradeoff = `Direct costs £${priceGap.toFixed(2)} more but saves ${fmtMins(timeGap)}. `;
+    tradeoff = `Direct costs £${priceGap.toFixed(2)} more but saves ${fmtMins(timeGap)}.`;
   } else if (priceGap <= 0 && timeGap > 0) {
-    tradeoff = `Direct is both cheaper (by £${Math.abs(priceGap).toFixed(2)}) and ${fmtMins(timeGap)} faster. `;
+    tradeoff = `Direct is both cheaper (by £${Math.abs(priceGap).toFixed(2)}) and ${fmtMins(timeGap)} faster.`;
   } else if (priceGap > 0 && timeGap <= 0) {
-    tradeoff = `The stop is cheaper by £${priceGap.toFixed(2)} and no slower. `;
+    tradeoff = `The stop is cheaper by £${priceGap.toFixed(2)} and no slower.`;
   } else {
-    tradeoff = `The two are within £${Math.abs(priceGap).toFixed(2)} and ${fmtMins(Math.abs(timeGap))} of each other. `;
+    tradeoff = `The two are within £${Math.abs(priceGap).toFixed(2)} and ${fmtMins(Math.abs(timeGap))} of each other.`;
   }
 
   // Light recommendation: reward direct when the time saved is worth a modest
   // premium; favour the stop when it saves real money for little extra time.
   let rec: string;
   if (priceGap <= 0 && timeGap >= 0) {
-    rec = "I'd take the direct — it wins on both price and time.";
+    rec = "**I'd take the direct** — it wins on both price and time.";
   } else if (priceGap > 0 && timeGap >= 90 && priceGap <= 40) {
-    rec = "I'd take the direct — the time saved is worth the small premium.";
+    rec = "**I'd take the direct** — the time saved is worth the small premium.";
   } else if (priceGap >= 40 && timeGap <= 90) {
-    rec = "I'd take the one with a stop — the saving outweighs the short extra time.";
+    rec = "**I'd take the one with a stop** — the saving outweighs the short extra time.";
   } else {
     rec = 'Pick the direct for speed, or the stop to save money — both are reasonable.';
   }
-  return lead + tradeoff + rec;
+
+  return [
+    rec,
+    tradeoff,
+    `Direct${dest}: £${d.price_gbp.toFixed(2)} (${d.duration_formatted}).`,
+    `With a stop: £${c.price_gbp.toFixed(2)} (${c.duration_formatted}).`,
+  ].join('\n\n');
 };
 
 /**

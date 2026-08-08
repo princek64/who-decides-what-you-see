@@ -4,6 +4,13 @@ import type { Flight, IntentJSON } from '../hooks/useFlightFilter';
 import { GenResponse } from './GenResponse';
 import { Plane, CreditCard, Leaf, RefreshCw, AlertTriangle, Calendar, MapPin } from 'lucide-react';
 import { getCityName } from '../lib/airportMap';
+import { DATA_MIN, DATA_MAX } from '../constants/prompts';
+
+// "5 Aug 2026" — concise, no weekday, for the assumed-dates range badge.
+const formatRangeDate = (date: string): string =>
+  new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+const DATASET_DATE_RANGE_LABEL = `${formatRangeDate(DATA_MIN)} – ${formatRangeDate(DATA_MAX)}`;
 
 type RefinePatch = Partial<IntentJSON & { layout?: string }>;
 
@@ -165,7 +172,7 @@ export const GenScreen: React.FC<GenScreenProps> = ({
                     title="No dates given — searched the whole available window"
                   >
                     <Calendar className="w-3 h-3" />
-                    Assumed dates: any, 1 Jul – 31 Dec 2026
+                    Assumed dates: any, {DATASET_DATE_RANGE_LABEL}
                   </span>
                 )}
               </div>

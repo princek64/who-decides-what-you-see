@@ -183,7 +183,7 @@ export const FlightDetailModal: React.FC<FlightDetailModalProps> = ({ flight, is
           </div>
         </div>
 
-        {/* Environmental Footprint and Status details */}
+        {/* Environmental Footprint */}
         <div className="mt-6 bg-muted border border-border rounded-lg p-4 text-xs flex flex-wrap justify-between items-center gap-4">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-card border border-border rounded-full">
@@ -196,9 +196,6 @@ export const FlightDetailModal: React.FC<FlightDetailModalProps> = ({ flight, is
           </div>
           <div className="text-right">
             <span className="text-lg font-mono tabular-nums font-semibold text-accent-green">{flight.co2_kg} kg</span>
-            <div className="text-[10px] text-muted-foreground font-medium uppercase mt-0.5">
-              Flight Status: {flight.flight_status}
-            </div>
           </div>
         </div>
       </DialogContent>
