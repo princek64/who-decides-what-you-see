@@ -477,6 +477,11 @@ export function useFlights() {
 
   return {
     flights: sortedFlights,
+    // Uncapped route/filter matches, before sortedFlights' render-performance
+    // truncation (>5000 -> top 2000). Needed by the destination grid, which
+    // aggregates by city rather than rendering rows, so it shouldn't lose
+    // cities just because the flat/itinerary list has to cap what it draws.
+    filteredFlights,
     rawFlights,
     totalFilteredCount: filteredFlights.length,
     isLoading,
