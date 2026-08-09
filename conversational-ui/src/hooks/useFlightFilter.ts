@@ -145,6 +145,18 @@ export const isRoundTripItinerary = (intent: IntentJSON): boolean =>
   daySpan(intent.date_from, intent.date_to) > 0 &&
   daySpan(intent.date_from, intent.date_to) <= MAX_ITINERARY_SPAN_DAYS;
 
+/**
+ * Today as YYYY-MM-DD in LOCAL time — the first day an undated search may
+ * return. Deliberately not toISOString(), which is UTC and rolls the day early
+ * in positive-offset zones (a 00:30 BST search would otherwise be bounded at
+ * yesterday). Mirrors generative-ui's searchStartDate() and dashboard-ui's
+ * todayKey().
+ */
+export const searchStartDate = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export const filterAndSortFlights = (
   flights: Flight[],
   intent: IntentJSON,
@@ -227,6 +239,23 @@ export const filterAndSortFlights = (
     if (intent.date_to && intent.date_to.trim()) {
       const to = intent.date_to.trim();
       filtered = filtered.filter((f) => f.date <= to);
+    }
+    // No date given at all: the search used to match every row in the dataset,
+    // which includes days that have already departed — the dataset starts
+    // before today and is only periodically shifted forward. Those fares are
+    // not bookable, so an undated search silently offered dead flights (and,
+    // because results sort by price, could name one as the cheapest). Bound it
+    // at today instead. Only applies when the user named NO date: an explicit
+    // date, or either end of an explicit range, is honoured exactly as before,
+    // including into the past.
+    //
+    // Slot-filling normally asks for dates before a search runs, so this is
+    // reached mainly by "anywhere" exploration ("where could I go for £150?"),
+    // which deliberately skips the dates question — precisely the case where a
+    // departed flight could be presented as the cheapest destination.
+    if (!intent.date_from?.trim() && !intent.date_to?.trim()) {
+      const start = searchStartDate();
+      filtered = filtered.filter((f) => f.date >= start);
     }
   }
 
