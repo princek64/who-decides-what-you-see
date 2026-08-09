@@ -34,8 +34,11 @@ export const FlightCarousel: React.FC<FlightCarouselProps> = ({
         <>
           {/* Horizontal carousel */}
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent snap-x">
+            {/* The card sizes itself up to a 280px ceiling so it can shrink
+                inside the expanded grid; here in the horizontal carousel the
+                width must stay fixed, so the wrapper pins it. */}
             {visibleCarouselFlights.map((flight) => (
-              <div key={flight.flight_id} className="snap-start">
+              <div key={flight.flight_id} className="snap-start w-[280px] shrink-0">
                 <FlightCompactCard flight={flight} onSelect={onSelectFlight} />
               </div>
             ))}

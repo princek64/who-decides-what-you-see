@@ -1,16 +1,23 @@
 import React from 'react';
 import type { ChatMessage } from '../hooks/useGenChat';
 import type { Flight, IntentJSON } from '../hooks/useFlightFilter';
+import { searchStartDate } from '../hooks/useFlightFilter';
 import { GenResponse } from './GenResponse';
 import { Plane, CreditCard, Leaf, RefreshCw, AlertTriangle, Calendar, MapPin } from 'lucide-react';
 import { getCityName } from '../lib/airportMap';
-import { DATA_MIN, DATA_MAX } from '../constants/prompts';
+import { DATA_MAX } from '../constants/prompts';
 
 // "5 Aug 2026" — concise, no weekday, for the assumed-dates range badge.
 const formatRangeDate = (date: string): string =>
   new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-const DATASET_DATE_RANGE_LABEL = `${formatRangeDate(DATA_MIN)} – ${formatRangeDate(DATA_MAX)}`;
+// The window an undated search actually covers: today through the last day in
+// the dataset. Derived from searchStartDate(), the same function the filter
+// bounds on, so the badge can never advertise a range the search did not use.
+// Called at render rather than module load so a tab left open overnight does
+// not keep quoting yesterday.
+const assumedDatesLabel = (): string =>
+  `${formatRangeDate(searchStartDate())} – ${formatRangeDate(DATA_MAX)}`;
 
 type RefinePatch = Partial<IntentJSON & { layout?: string }>;
 
@@ -169,10 +176,10 @@ export const GenScreen: React.FC<GenScreenProps> = ({
                 {showDateAssumption && (
                   <span
                     className="inline-flex items-center gap-1.5 bg-muted border border-border rounded-full px-3 py-1 text-[11px] font-medium text-muted-foreground"
-                    title="No dates given — searched the whole available window"
+                    title="No dates given — searched every date from today onwards"
                   >
                     <Calendar className="w-3 h-3" />
-                    Assumed dates: any, {DATASET_DATE_RANGE_LABEL}
+                    Assumed dates: any, {assumedDatesLabel()}
                   </span>
                 )}
               </div>
