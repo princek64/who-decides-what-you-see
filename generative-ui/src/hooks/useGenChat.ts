@@ -15,6 +15,7 @@ import {
   sleep,
 } from '../lib/apiRetry';
 import { loadFlightData } from '../lib/flightData';
+import { isReturnOnlyQuery, destinationFromText, dateFromText } from '../lib/returnLeg';
 import { buildItinerary, nearbyAlternatives } from '../lib/layoutData';
 import type { ItineraryPair, AlertAlternatives } from '../lib/layoutData';
 
@@ -391,6 +392,28 @@ export const useGenChat = () => {
         ]);
         setIsLoading(false);
         return;
+      }
+
+      // Return-leg phrasings ("flights back from Barcelona", "the return leg")
+      // are sometimes answered by gpt-oss-20b with {"off_topic": true} and
+      // nothing else, discarding a destination and date the user gave. The
+      // off_topic check below returns before any wording backstop runs, so the
+      // correction has to happen here: clear the flag, then read the dropped
+      // destination/date off the message text. Only ever fills blanks — whatever
+      // the model did extract wins. Direction is left to the existing
+      // round-trip/return-only backstops further down, which already encode the
+      // precedence between them. Mirrors conversational-ui's
+      // applyWordingBackstops.
+      if (isReturnOnlyQuery(text)) {
+        intent.off_topic = false;
+        if (!intent.dest_city?.trim() && !intent.dest_code?.trim()) {
+          const destination = destinationFromText(text);
+          if (destination) intent.dest_city = destination;
+        }
+        if (!intent.date?.trim() && !intent.date_from?.trim() && !intent.date_to?.trim()) {
+          const date = dateFromText(text);
+          if (date) intent.date = date;
+        }
       }
 
       // Off-topic messages: answer politely instead of dumping the whole dataset

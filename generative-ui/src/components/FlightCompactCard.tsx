@@ -26,10 +26,18 @@ export const FlightCompactCard: React.FC<FlightCompactCardProps> = ({ flight, on
     }
   };
 
+  // Width is a CEILING, not a fixed size: this card renders both in the
+  // horizontal carousel (where the wrapper pins 280px) and in the expanded
+  // responsive grid, whose columns fall below 280px at narrower viewports. A
+  // hard w-[280px] overflowed those columns, and because the grid sets
+  // overflow-y-auto — which promotes overflow-x from visible to auto — the
+  // excess was clipped, cutting the centred "Book on <airline>" label. min-h
+  // rather than h so a long label can never be cropped by the Card primitive's
+  // overflow-hidden either.
   return (
     <Card
       onClick={() => onSelect(flight)}
-      className="w-[280px] h-[212px] shrink-0 p-3.5 flex flex-col justify-between hover:border-white/20 transition-all cursor-pointer bg-card border border-border rounded-lg shadow-none select-none"
+      className="w-full max-w-[280px] min-h-[212px] shrink-0 p-3.5 flex flex-col justify-between hover:border-white/20 transition-all cursor-pointer bg-card border border-border rounded-lg shadow-none select-none"
     >
       {/* Top row: Carrier & Status */}
       <div className="flex justify-between items-center text-[10px] text-muted-foreground font-medium">
@@ -104,7 +112,7 @@ export const FlightCompactCard: React.FC<FlightCompactCardProps> = ({ flight, on
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
-        className="w-full text-center text-[11px] font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1.5 transition-colors"
+        className="w-full text-center text-[11px] font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1.5 px-2 transition-colors"
       >
         Book on {flight.airline_name}
       </a>
