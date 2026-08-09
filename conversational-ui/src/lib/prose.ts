@@ -1,4 +1,5 @@
 import type { Flight, IntentJSON } from '../hooks/useFlightFilter';
+import { isRoundTripItinerary } from '../hooks/useFlightFilter';
 import { AIRPORT_TO_CITY } from './airportMap';
 import { formatFlightDate } from './utils';
 import { cheapestBy } from './insights';
@@ -68,10 +69,15 @@ export const describeConstraints = (intent: IntentJSON): string => {
   if (intent.date) {
     dateInfo = ` on ${formatFlightDate(intent.date)}`;
   } else if (intent.date_from && intent.date_to) {
-    dateInfo =
-      intent.date_from === intent.date_to
-        ? ` on ${formatFlightDate(intent.date_from)}`
-        : ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
+    if (intent.date_from === intent.date_to) {
+      dateInfo = ` on ${formatFlightDate(intent.date_from)}`;
+    } else if (isRoundTripItinerary(intent)) {
+      // Two close-together dates on a round trip are an outbound/return pair,
+      // not a flexible window — say so plainly rather than "between X and Y".
+      dateInfo = ` — outbound ${formatFlightDate(intent.date_from)}, return ${formatFlightDate(intent.date_to)}`;
+    } else {
+      dateInfo = ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
+    }
   }
   return `${destInfo}${priceInfo}${timeInfo}${weekendInfo}${dateInfo}`;
 };
@@ -113,22 +119,27 @@ const flightBullet = (f: Flight, withDate: boolean, withDest: boolean): ProseNod
   ];
 };
 
-// The single-result case reads better as a sentence than as a one-item list.
-const flightSentence = (f: Flight, withDate: boolean, withDest: boolean): ProseNode[] => [
+// The single-result case reads as two short sentences — route/date, then
+// times/price — rather than one clause carrying every fact at once.
+const flightRouteSentence = (f: Flight, withDate: boolean, withDest: boolean): ProseNode[] => [
   { type: 'text', text: "It's " },
   { type: 'flight', text: `${f.airline_name} ${f.flight_number}`, flight: f },
   {
     type: 'text',
     text:
       ` from ${airportLabel(f.origin_code)}${withDest ? ` to ${destLabel(f.dest_code)}` : ''}` +
-      `${withDate ? ` on ${formatFlightDate(f.date)}` : ''}, ` +
-      `departing ${f.departure_time} and arriving ${f.arrival_time}` +
-      `${stopsClause(f)} (${f.duration_formatted}), at `,
+      `${withDate ? ` on ${formatFlightDate(f.date)}` : ''}${stopsClause(f)}.`,
+  },
+];
+
+const flightDetailSentence = (f: Flight): ProseNode[] => [
+  {
+    type: 'text',
+    text: `Departs ${f.departure_time}, arrives ${f.arrival_time} (${f.duration_formatted}) — `,
   },
   { type: 'strong', text: money(f.price_gbp) },
   { type: 'text', text: ' — ' },
   { type: 'link', text: `Book on ${f.airline_name}`, href: bookingHref(f) },
-  { type: 'text', text: '.' },
 ];
 
 const cheapestLine = (f: Flight): ProseNode[] => [
@@ -256,13 +267,11 @@ export const buildProseAnswer = (
   const askNodes: ProseNode[] = question ? [{ type: 'text', text: ` ${question}` }] : [];
 
   if (count === 1) {
+    blocks.push({ kind: 'paragraph', nodes: [{ type: 'text', text: `${found}.` }] });
+    blocks.push({ kind: 'paragraph', nodes: flightRouteSentence(shown[0], withDate, withDest) });
     blocks.push({
       kind: 'paragraph',
-      nodes: [
-        { type: 'text', text: `${found}. ` },
-        ...flightSentence(shown[0], withDate, withDest),
-        ...askNodes,
-      ],
+      nodes: [...flightDetailSentence(shown[0]), ...askNodes],
     });
     return {
       blocks,

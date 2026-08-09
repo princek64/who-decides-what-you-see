@@ -1,5 +1,8 @@
-const DATA_MIN = '2026-07-01';
-const DATA_MAX = '2026-12-31';
+// Kept in sync with the canonical CSV's actual date span (see
+// data/verify_dataset.py) — the dataset gets periodically shifted forward so
+// searches never land on past dates; update these two whenever that happens.
+export const DATA_MIN = '2026-08-05';
+export const DATA_MAX = '2027-02-04';
 
 // The real "today", clamped into the dataset window so relative dates ("this
 // weekend", example-chip dates) always resolve to searchable flights. Shared by
@@ -84,6 +87,7 @@ RULES:
    - "in August" -> date_from "2026-08-01", date_to "2026-08-31".
    - "next 3 months" -> date_from "${anchor}", date_to "${anchorPlus3}".
    FLEXIBLE WINDOWS: "cheapest weekend in the next 3 months", "best time to go in autumn" -> return the FULL window as date_from/date_to with sort "cheapest". NEVER collapse a flexible window to one day or one weekend.
+   NO DATE MENTIONED: if the user names a destination but says NOTHING about timing (no date, no "tomorrow", no month, no weekend, no window), leave date_from AND date_to both null so "missing" includes "dates" and the app asks for them. Do NOT copy a date from one of the EXAMPLES below or invent one — those example dates only apply when the user actually said something equivalent.
 5. direct_only: "direct"/"nonstop" -> true. "with a stop"/"connecting" -> false. A COMPARISON ("compare direct vs connecting", "direct or with a stop", "a direct flight with one that has a stop") -> null, so both are shown.
 6. Never put London (or a London airport) in "destination"; London is only ever the origin. Only set "origin" when the user explicitly states where they depart from.
 7. "missing" lists REQUIRED slots that are still null: include "destination" when destination is null, and "dates" when BOTH date_from and date_to are null.
@@ -105,6 +109,8 @@ EXAMPLES (input -> output):
   -> {"destination":null,"date_from":null,"date_to":null,"cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":50,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":true,"detail_field":null,"detail_target":null,"off_topic":false}
 - "compare a direct flight to Rome with one that has a stop on 10 July"
   -> {"destination":"Rome","date_from":"2026-07-10","date_to":"2026-07-10","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
+- "You're flying to Rome. Compare a direct flight against one with a stop. Which would you pick, and why?"
+  -> {"destination":"Rome","date_from":null,"date_to":null,"cabin":null,"direct_only":null,"sort":"cheapest","missing":["dates"],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
 - "What is the cheapest weekend to fly to Paris in the next 3 months?"
   -> {"destination":"Paris","date_from":"${anchor}","date_to":"${anchorPlus3}","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
 - "best time to go to Lisbon in autumn"

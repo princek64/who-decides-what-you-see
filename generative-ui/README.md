@@ -1,6 +1,6 @@
 # Flight Assistant - Generative UI Research Prototype
 
-This is the generative UI flight search interface developed for the MA dissertation research project comparing user search paradigms. It forks the conversational prototype: the same natural-language intent extraction feeds an LLM-chosen layout, so the results canvas changes shape with the query. It utilizes React, Vite, TypeScript, Tailwind CSS, and integrates with the Groq API (using the `llama-3.1-8b-instant` model).
+This is the generative UI flight search interface developed for the MA dissertation research project comparing user search paradigms. It forks the conversational prototype: the same natural-language intent extraction feeds an LLM-chosen layout, so the results canvas changes shape with the query. It utilizes React, Vite, TypeScript, Tailwind CSS, and integrates with the Groq API (using the `openai/gpt-oss-20b` model).
 
 ## Setup
 

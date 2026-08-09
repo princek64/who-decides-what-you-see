@@ -11,15 +11,6 @@ interface FlightCompactCardProps {
 }
 
 export const FlightCompactCard: React.FC<FlightCompactCardProps> = ({ flight, onSelect }) => {
-  // Colour only carries meaning: the status dot is green (on time) / amber (delayed).
-  const getStatusDot = (status: string) => {
-    switch (status) {
-      case 'On time': return 'bg-accent-green';
-      case 'Delayed': return 'bg-accent-amber';
-      default: return 'bg-muted-foreground';
-    }
-  };
-
   const getDemandBadge = () => {
     switch (flight.demand_indicator) {
       case 'Low':
@@ -61,10 +52,6 @@ export const FlightCompactCard: React.FC<FlightCompactCardProps> = ({ flight, on
                 : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
             })()}
           </span>
-          <Badge className="bg-transparent text-muted-foreground border-border text-[9px] px-1.5 py-0.5 border font-medium rounded-full flex items-center gap-1">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getStatusDot(flight.flight_status)}`}></span>
-            {flight.flight_status}
-          </Badge>
         </div>
       </div>
 

@@ -1,5 +1,8 @@
-const DATA_MIN = '2026-07-01';
-const DATA_MAX = '2026-12-31';
+// Kept in sync with the canonical CSV's actual date span (see
+// data/verify_dataset.py) — the dataset gets periodically shifted forward so
+// searches never land on past dates; update these two whenever that happens.
+export const DATA_MIN = '2026-08-05';
+export const DATA_MAX = '2027-02-04';
 
 // The real "today", clamped into the dataset window so relative dates and the
 // empty-state example chips always resolve to searchable (future) flights.
@@ -79,6 +82,7 @@ CRITICAL RULES:
    - "next 3 months" -> "date_from": today, "date_to": today + 3 months (capped at ${DATA_MAX}).
    Use "date" for a single day, "date_from"/"date_to" for a range. Never use both.
    FLEXIBLE-DATE SEARCHES: when the user asks for the cheapest day/weekend/time WITHIN a window ("cheapest weekend in the next 3 months", "best time to go in autumn"), you MUST return the FULL window as "date_from"/"date_to" with "sort_by": "cheapest". NEVER collapse the window to a single day or single weekend — the cheapest dates can only be found by searching the whole window.
+   NO DATE MENTIONED AT ALL: if the user says nothing about timing — no date, no "tomorrow", no month, no weekend, no window — leave "date", "date_from", AND "date_to" ALL empty/null. Do NOT default to today or guess any date. An unqualified "cheapest flight" must search the ENTIRE available window, not one arbitrary day — picking a single day would just be searching one day's fares, not finding the true cheapest.
 11. If the user's message is NOT about finding flights AT ALL (e.g. weather, jokes, coding help, general chat), return exactly: {"off_topic": true}. A vague or broad flight request ("show me flights", "I want to fly somewhere", "find me a trip") is NOT off-topic — for those, return {} (an empty JSON object with no fields) so the assistant can ask a clarifying question.
 12. If the user asks a follow-up that refines their previous search (e.g. "what about after 6pm?"), merge the new constraint with the destination/date from their earlier messages.
 13. LAYOUT: alongside the search fields, always choose the ONE layout that best presents the answer, in a "layout" field. Criteria:
@@ -121,8 +125,10 @@ Allowed JSON structure:
 EXAMPLES (input -> output):
 - "show me flights" -> {}
 - "cheapest direct flight to Barcelona on 14 July" -> {"dest_city": "Barcelona", "date": "2026-07-14", "stops": 0, "direction": "outbound", "sort_by": "cheapest", "layout": "highlight"}
+- "find the cheapest direct flight from London to Barcelona" -> {"dest_city": "Barcelona", "stops": 0, "direction": "outbound", "sort_by": "cheapest", "layout": "highlight"}
 - "flights to Amsterdam after 6pm under £80" -> {"dest_city": "Amsterdam", "departure_after": "18:00", "max_price": 80, "direction": "outbound", "sort_by": "cheapest", "layout": "grid"}
 - "compare a direct flight to Rome with one that has a stop on 10 July" -> {"dest_city": "Rome", "date": "2026-07-10", "direction": "outbound", "sort_by": "cheapest", "layout": "comparison"}
+- "You're flying to Rome. Compare a direct flight against one with a stop. Which would you pick, and why?" -> {"dest_city": "Rome", "direction": "outbound", "sort_by": "cheapest", "layout": "comparison"}
 - "what is the cheapest weekend to fly to Paris in the next 3 months?" -> {"dest_city": "Paris", "date_from": "${anchor}", "date_to": "${anchorPlus3}", "direction": "outbound", "sort_by": "cheapest", "layout": "calendar"}
 - "when is it cheapest to fly to Madrid over the next few weeks?" -> {"dest_city": "Madrid", "date_from": "${anchor}", "date_to": "${anchorPlus3}", "direction": "outbound", "sort_by": "cheapest", "layout": "trend"}
 - "where can I go for £150?" -> {"max_price": 150, "direction": "outbound", "sort_by": "cheapest", "layout": "destinations"}

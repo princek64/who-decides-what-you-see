@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Groq from 'groq-sdk';
 import { buildSystemPrompt, STRICT_RETRY_PROMPT, MODEL_LAYOUTS } from '../constants/prompts';
 import type { Layout } from '../constants/prompts';
-import { filterAndSortFlights, resolveDestCodes } from './useFlightFilter';
+import { filterAndSortFlights, resolveDestCodes, isRoundTripItinerary } from './useFlightFilter';
 import type { Flight, IntentJSON } from './useFlightFilter';
 import { getCityName } from '../lib/airportMap';
 import { formatFlightDate } from '../lib/utils';
@@ -125,10 +125,16 @@ export const useGenChat = () => {
     if (intent.date) {
       dateInfo = ` on ${formatFlightDate(intent.date)}`;
     } else if (intent.date_from && intent.date_to) {
-      dateInfo =
-        intent.date_from === intent.date_to
-          ? ` on ${formatFlightDate(intent.date_from)}`
-          : ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
+      if (intent.date_from === intent.date_to) {
+        dateInfo = ` on ${formatFlightDate(intent.date_from)}`;
+      } else if (isRoundTripItinerary(intent)) {
+        // Two close-together dates on a round trip are an outbound/return
+        // pair, not a flexible window — say so plainly rather than "between
+        // X and Y".
+        dateInfo = ` — outbound ${formatFlightDate(intent.date_from)}, return ${formatFlightDate(intent.date_to)}`;
+      } else {
+        dateInfo = ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
+      }
     }
     const base = `Found ${count} ${stopInfo}flight${count === 1 ? '' : 's'}${destInfo}${priceInfo}${timeInfo}${weekendInfo}${dateInfo}`;
     switch (layout) {
@@ -176,17 +182,31 @@ export const useGenChat = () => {
       }));
 
     const systemPrompt = buildSystemPrompt();
+    // See the matching note in conversational-ui's useChat. The system prompt
+    // is the cacheable prefix and must stay byte-identical across calls,
+    // including retries, so the strict-retry instruction gets its own message
+    // rather than being appended onto the prefix. userHistory stays after it:
+    // it varies per turn, so it can only ever sit outside the cached span.
     const messagesPayload = [
-      { role: 'system' as const, content: isRetry ? `${systemPrompt}\n${STRICT_RETRY_PROMPT}` : systemPrompt },
+      { role: 'system' as const, content: systemPrompt },
+      ...(isRetry ? [{ role: 'system' as const, content: STRICT_RETRY_PROMPT }] : []),
       ...userHistory,
       { role: 'user' as const, content: userMessage },
     ];
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'openai/gpt-oss-20b',
       messages: messagesPayload,
       temperature: 0.1,
-      max_tokens: 300,
+      // Headroom, not a target — see the matching note in conversational-ui's
+      // useChat. Unused ceiling is free; a truncated object is a guaranteed
+      // parse failure.
+      max_tokens: 800,
+      // See the matching note in conversational-ui's useChat: gpt-oss-20b
+      // spends reasoning tokens out of max_tokens, and at default effort it
+      // exhausted this 300-token budget before emitting any JSON. Low effort
+      // keeps reasoning small enough that the layout JSON always fits.
+      reasoning_effort: 'low',
     });
 
     return completion.choices[0]?.message?.content ?? '';
@@ -432,6 +452,33 @@ export const useGenChat = () => {
       // so backstop it deterministically from the user's own wording.
       if (!intent.weekend && /\bweekend\b/i.test(text)) {
         intent.weekend = true;
+      }
+
+      // "return flight(s)"/"round trip" as a bare phrase means a ROUND TRIP
+      // ticket in everyday (especially UK) English, not "just the leg back" —
+      // show both directions, same as picking a city from a budget/anywhere
+      // search. Backstopped deterministically since the 8B model doesn't
+      // reliably emit "direction":"return" or compose it with 'both' either.
+      if (
+        /\breturn\s+flights?\b/i.test(text) ||
+        /\bround[- ]trip\b/i.test(text) ||
+        /\bthere\s+and\s+back\b/i.test(text)
+      ) {
+        intent.direction = 'both';
+      }
+
+      // "flight(s) back"/"the return leg" specifically single out the
+      // INBOUND leg only — unlike bare "return flight(s)" above. Deliberately
+      // does not match bare "...and come back on 14 July" (no adjacent
+      // flight/leg word), which is round-trip date phrasing, not a
+      // return-leg-only request.
+      if (
+        /\bflights?\s+back\b/i.test(text) ||
+        /\bflying\s+back\b/i.test(text) ||
+        /\b(?:return|inbound)\s+leg\b/i.test(text) ||
+        /\bcoming\s+back\s+flights?\b/i.test(text)
+      ) {
+        intent.direction = 'return';
       }
 
       await applyIntent(intent);
