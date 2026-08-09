@@ -20,8 +20,8 @@ See each app's `README.md` and `DESIGN.md` for details.
 | App | Paradigm | LLM |
 |---|---|---|
 | [`dashboard-ui/`](dashboard-ui) | Conventional filter-and-sort dashboard (control) | none |
-| [`conversational-ui/`](conversational-ui) | Natural-language chat, fixed result layout | Groq `llama-3.1-8b-instant` |
-| [`generative-ui/`](generative-ui) | Natural-language chat, LLM-chosen result layout | Groq `llama-3.1-8b-instant` |
+| [`conversational-ui/`](conversational-ui) | Natural-language chat, fixed result layout | Groq `openai/gpt-oss-20b` |
+| [`generative-ui/`](generative-ui) | Natural-language chat, LLM-chosen result layout | Groq `openai/gpt-oss-20b` |
 
 All three share one design system (Geist dark).
 

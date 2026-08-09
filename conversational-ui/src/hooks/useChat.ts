@@ -7,6 +7,7 @@ import { getCityName } from '../lib/airportMap';
 import {
   applyWordingBackstops,
   classifyOrigin,
+  datesQuestionFor,
   firstMissingRequiredSlot,
   londonAirportLabel,
   resolveTurnSlot,
@@ -161,16 +162,39 @@ export const useChat = () => {
   // call Groq completions API.
   const callGroq = async (userMessage: string, isRetry = false): Promise<string> => {
     const systemPrompt = buildSystemPrompt();
+    // The system prompt is the cacheable prefix: identical for every call
+    // within a day, first in the array, and far above Groq's minimum
+    // cacheable length. It must stay byte-identical on retries too — this
+    // used to append STRICT_RETRY_PROMPT onto it, which changed the prefix
+    // and forfeited the cache on exactly the calls that had already paid for
+    // one failed round trip. The retry instruction now rides in its own
+    // message after the prefix, so it costs its own few tokens and nothing
+    // more. Content is unchanged; only which message carries it.
     const messagesPayload = [
-      { role: 'system' as const, content: isRetry ? `${systemPrompt}\n${STRICT_RETRY_PROMPT}` : systemPrompt },
+      { role: 'system' as const, content: systemPrompt },
+      ...(isRetry ? [{ role: 'system' as const, content: STRICT_RETRY_PROMPT }] : []),
       { role: 'user' as const, content: userMessage },
     ];
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'openai/gpt-oss-20b',
       messages: messagesPayload,
       temperature: 0,
-      max_tokens: 400,
+      // Headroom, not a target: only tokens actually emitted are billed, so an
+      // unused ceiling is free. 400 was measured truncating mid-JSON on real
+      // queries ("I need a flight back from Barcelona on 20 September" emitted
+      // exactly 400 and cut off inside the object), which fails the parse and
+      // sends the turn down the retry path for no recoverable reason. This
+      // schema alone is ~120 tokens of JSON before any reasoning.
+      max_tokens: 1000,
+      // gpt-oss-20b is a reasoning model, and its reasoning tokens are
+      // charged against max_tokens before any answer is emitted. At the
+      // default effort they consumed the whole budget on longer queries
+      // ("You have £150 and a free weekend..."), so the reply came back
+      // empty with finish_reason "length" and the JSON parse failed. Low
+      // effort holds reasoning to ~10-60 tokens, leaving the existing
+      // budget for the JSON payload itself.
+      reasoning_effort: 'low',
     });
 
     return completion.choices[0]?.message?.content ?? '';
@@ -235,7 +259,8 @@ export const useChat = () => {
     // Explicit slot-filling (app decides, not the model)
     const missing = firstMissingRequiredSlot(slot);
     if (missing) {
-      pushAssistant({ text: SLOT_QUESTIONS[missing], slot, awaitingSlot: missing });
+      const text = missing === 'dates' ? datesQuestionFor(slot) : SLOT_QUESTIONS[missing];
+      pushAssistant({ text, slot, awaitingSlot: missing });
       return;
     }
 

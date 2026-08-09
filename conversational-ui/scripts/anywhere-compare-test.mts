@@ -40,7 +40,7 @@ const medianCo2 = co2[Math.floor(co2.length/2)];
 async function callGroq(userMessage: string, retry = false): Promise<string> {
   const sys = buildSystemPrompt();
   const completion = await groq.chat.completions.create({
-    model: 'llama-3.1-8b-instant', temperature: 0, max_tokens: 400,
+    model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 400, reasoning_effort: 'low',
     messages: [{ role: 'system', content: retry ? `${sys}\n${STRICT_RETRY_PROMPT}` : sys }, { role: 'user', content: userMessage }],
   });
   return completion.choices[0]?.message?.content ?? '';

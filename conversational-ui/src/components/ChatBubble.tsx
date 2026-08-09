@@ -188,10 +188,15 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         <>
           {/* "What I understood" note, stated before the answer */}
           <AssumptionLine intent={message.intent} onPickOrigin={onPickOrigin} />
-          {/* Comparison / cheapest-day insight, stated before the answer */}
-          {message.preface && (
-            <p className="text-sm leading-relaxed text-foreground mb-2">{message.preface}</p>
-          )}
+          {/* Comparison / cheapest-day insight, stated before the answer. Split
+              on blank lines so a verdict + supporting facts read as short,
+              scannable paragraphs instead of one dense sentence. */}
+          {message.preface &&
+            message.preface.split('\n\n').map((para, i) => (
+              <p key={i} className="text-sm leading-relaxed text-foreground [&:not(:first-child)]:mt-2 mb-2">
+                {renderInlineBold(para)}
+              </p>
+            ))}
           <FlightProse
             flights={message.flights!}
             intent={message.intent || {}}

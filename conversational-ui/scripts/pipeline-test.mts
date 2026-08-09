@@ -278,7 +278,8 @@ const completeWithRetry = async (query: string, history: string[] = []): Promise
   for (let attempt = 0; ; attempt++) {
     try {
       const completion = await groq.chat.completions.create({
-        model: 'llama-3.1-8b-instant',
+        model: 'openai/gpt-oss-20b',
+        reasoning_effort: 'low',
         messages: [
           { role: 'system', content: systemPrompt },
           ...history.map((h) => ({ role: 'user' as const, content: h })),
