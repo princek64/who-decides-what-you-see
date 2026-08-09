@@ -180,7 +180,13 @@ export const useChat = () => {
       model: 'openai/gpt-oss-20b',
       messages: messagesPayload,
       temperature: 0,
-      max_tokens: 400,
+      // Headroom, not a target: only tokens actually emitted are billed, so an
+      // unused ceiling is free. 400 was measured truncating mid-JSON on real
+      // queries ("I need a flight back from Barcelona on 20 September" emitted
+      // exactly 400 and cut off inside the object), which fails the parse and
+      // sends the turn down the retry path for no recoverable reason. This
+      // schema alone is ~120 tokens of JSON before any reasoning.
+      max_tokens: 1000,
       // gpt-oss-20b is a reasoning model, and its reasoning tokens are
       // charged against max_tokens before any answer is emitted. At the
       // default effort they consumed the whole budget on longer queries

@@ -198,7 +198,10 @@ export const useGenChat = () => {
       model: 'openai/gpt-oss-20b',
       messages: messagesPayload,
       temperature: 0.1,
-      max_tokens: 300,
+      // Headroom, not a target — see the matching note in conversational-ui's
+      // useChat. Unused ceiling is free; a truncated object is a guaranteed
+      // parse failure.
+      max_tokens: 800,
       // See the matching note in conversational-ui's useChat: gpt-oss-20b
       // spends reasoning tokens out of max_tokens, and at default effort it
       // exhausted this 300-token budget before emitting any JSON. Low effort
