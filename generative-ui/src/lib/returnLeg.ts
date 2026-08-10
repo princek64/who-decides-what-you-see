@@ -41,6 +41,15 @@ const MONTHS: Record<string, number> = {
 const MONTH_NAMES = Object.keys(MONTHS).join('|');
 const DAY_THEN_MONTH = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_NAMES})\\b`, 'i');
 const MONTH_THEN_DAY = new RegExp(`\\b(${MONTH_NAMES})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, 'i');
+// "the 21st of November" — the "of" blocks DAY_THEN_MONTH's `\s+` adjacency.
+const DAY_OF_MONTH = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+of\\s+(${MONTH_NAMES})\\b`, 'i');
+// "21/11" and "21/11/2026" — UK order, day first. Only the slash separator is
+// accepted: "-" and "." both collide with things that are not dates at all
+// ("50-80" for a price range, "1.5 hours"), and a day/month pair read out of
+// those is a plausible-looking date rather than an obvious miss.
+const NUMERIC_DAY_MONTH = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/;
+// "2026-11-21" typed verbatim.
+const ISO_DATE = /\b(\d{4})-(\d{2})-(\d{2})\b/;
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
@@ -58,8 +67,19 @@ const isoWithinDataWindow = (day: number, month: number): string | null => {
   return null;
 };
 
-/** "20 September" / "20th Sept" / "September 20" -> "2026-09-20". */
+/**
+ * "20 September" / "20th Sept" / "September 20" / "the 21st of November" /
+ * "21/11" / "2026-11-21" -> "2026-09-20". Returns null when the text holds no
+ * day+month pair, or when the pair is not a real date inside the data window.
+ */
 export const dateFromText = (text: string): string | null => {
+  // "the 21st of November" is checked before the bare day+month form, whose
+  // `\s+` adjacency cannot span the "of".
+  const dayOf = DAY_OF_MONTH.exec(text);
+  if (dayOf) {
+    const iso = isoWithinDataWindow(Number(dayOf[1]), MONTHS[dayOf[2].toLowerCase()]);
+    if (iso) return iso;
+  }
   const dayFirst = DAY_THEN_MONTH.exec(text);
   if (dayFirst) {
     const iso = isoWithinDataWindow(Number(dayFirst[1]), MONTHS[dayFirst[2].toLowerCase()]);
@@ -70,5 +90,42 @@ export const dateFromText = (text: string): string | null => {
     const iso = isoWithinDataWindow(Number(monthFirst[2]), MONTHS[monthFirst[1].toLowerCase()]);
     if (iso) return iso;
   }
+  const iso8601 = ISO_DATE.exec(text);
+  if (iso8601) {
+    const iso = isoWithinDataWindow(Number(iso8601[3]), Number(iso8601[2]));
+    if (iso) return iso;
+  }
+  const numeric = NUMERIC_DAY_MONTH.exec(text);
+  if (numeric) {
+    const iso = isoWithinDataWindow(Number(numeric[1]), Number(numeric[2]));
+    if (iso) return iso;
+  }
   return null;
 };
+
+/**
+ * A message that refines the screen already rendered rather than starting a
+ * new search: "show me the other flight", "show me the other option", "what
+ * about the one with a stop", "the second one", "the next cheapest".
+ *
+ * Mirrors isRefinementQuery in conversational-ui's lib/slots.ts. These carry no
+ * destination and no date of their own, so every constraint already established
+ * has to survive them. That is not automatic: this app sends only the last
+ * three USER messages as history, so once the dated turn falls out of that
+ * window the model answers a refinement cold — and cold, gpt-oss-20b echoes a
+ * destination and date straight out of the few-shot examples in the system
+ * prompt rather than returning nothing.
+ *
+ * The referent noun is required (…"the other ONE/OPTION/FLIGHT"), so this does
+ * not fire on "the other hotel" and turn an off-topic message into a search.
+ */
+export const isRefinementQuery = (text: string): boolean =>
+  /\bthe\s+(?:other|next|second|third|last|first|cheaper|earlier|later)\s+(?:one|ones|option|options|flight|flights|result|results)\b/i.test(text) ||
+  /\bthe\s+other\b\s*[.!?]?\s*$/i.test(text) ||
+  /\bthe\s+(?:one|ones)\s+(?:with|without|that|which)\b/i.test(text) ||
+  /\b(?:next|other)\s+(?:cheapest|fastest)\b/i.test(text);
+
+/** True when the message is a refinement AND names no destination or date of
+ *  its own — the case where every established constraint must carry forward. */
+export const isPureRefinement = (text: string): boolean =>
+  isRefinementQuery(text) && !destinationFromText(text) && !dateFromText(text);
