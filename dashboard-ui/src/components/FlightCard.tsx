@@ -63,9 +63,17 @@ export const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect, style 
           isCancelled ? 'opacity-65 border-dashed bg-secondary/40' : ''
         }`}
       >
-        {/* Top Line: Airline details, flight status, and aircraft. On mobile the
-            metadata (tier, flight number, aircraft) is dropped so the airline
-            name and date stay on one line inside the fixed card height. */}
+        {/* Top Line: Airline details and aircraft. Deliberately carries NO
+            flight-status badge: every flight in this dataset is future-dated and
+            synthetic, so "Delayed" / "On time" / "Scheduled" claimed knowledge
+            the system cannot have. In testing that badge did real damage — one
+            participant avoided a flight she otherwise wanted because it read
+            "Delayed", and two asked how a future flight could have a status at
+            all. Cancellation is still reflected, but as card styling (dimmed,
+            dashed border, struck-through figures) rather than a status claim.
+            On mobile the metadata (tier, flight number, aircraft) is dropped so
+            the airline name and date stay on one line inside the fixed card
+            height. */}
         <div className="flex justify-between items-center gap-2 text-xs text-muted-foreground min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             {/* Black line-art on transparent: `invert` renders it white so it
