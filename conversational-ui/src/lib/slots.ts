@@ -154,6 +154,27 @@ export const isDropDirectQuery = (text: string): boolean =>
 export const isLowCo2Query = (text: string): boolean =>
   /\b(?:low|lower|lowest|less|least|reduce|reduced|greener?|eco)\w*[\s-]*(?:co2\b|co₂|carbon\b|emissions?\b|footprint\b)/i.test(text);
 
+/**
+ * "show me all options" / "list all flights" / "see all results" — a request to
+ * see the FULL result set laid out, not another summary of it.
+ *
+ * The thread answers in prose and shows at most TABLE_PREVIEW_ROWS rows, which
+ * is the right default for a first answer but leaves no way to ask for the rest.
+ * Asked for everything, the model returned the same shape of summary again — one
+ * participant asked twice and got the same answer both times, because nothing in
+ * the pipeline treated "all" as a display request rather than a search.
+ *
+ * Deliberately requires the "all" quantifier. "show me flights to Rome" and
+ * "show me the cheapest" are ordinary searches and must keep going through the
+ * model; only an explicit request for everything routes to the full list.
+ */
+export const isShowAllQuery = (text: string): boolean =>
+  /\b(?:show|list|see|give|display|view)\s+(?:me\s+|us\s+)?(?:all|every)\b/i.test(text) ||
+  /\b(?:show|list|see|view)\s+(?:me\s+|us\s+)?(?:the\s+)?(?:full|complete|whole|entire)\s+(?:list|set|results?)\b/i.test(text) ||
+  /\ball\s+(?:the\s+)?(?:options|flights|results)\b/i.test(text) ||
+  /\beverything\s+(?:you\s+(?:have|found)|available)\b/i.test(text) ||
+  /\b(?:what|which)\s+(?:are\s+)?(?:all\s+)?(?:my|the)\s+(?:other\s+)?options\b/i.test(text);
+
 // "return flights to Barcelona" / "round trip to Rome" — in everyday English
 // (especially UK English, where this app is set) "return flight(s)" as a bare
 // noun phrase means a ROUND TRIP ticket, not "just the leg back." Show both
