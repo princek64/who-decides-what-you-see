@@ -6,6 +6,9 @@ import type { Flight, IntentJSON } from './useFlightFilter';
 import { getCityName } from '../lib/airportMap';
 import {
   applyWordingBackstops,
+  isAddReturnLegQuery,
+  destinationFromText,
+  dateFromText,
   classifyOrigin,
   datesQuestionFor,
   firstMissingRequiredSlot,
@@ -336,6 +339,44 @@ export const useChat = () => {
     }
   };
 
+  /**
+   * "show me the return tickets" as a follow-up: add the way home to the search
+   * already on screen rather than starting a new one.
+   *
+   * Answered from the previous slot, without a model call. The whole point is
+   * that nothing about the existing search may drift — destination, dates, price
+   * cap and stop preference all carry forward verbatim — and a re-extraction is
+   * the one thing that could lose them. Flipping round_trip on sends it through
+   * slotToIntent as direction 'both', so filterAndSortFlights queries the
+   * outbound AND inbound legs and the answer shows them separated and labelled.
+   *
+   * return_only is cleared: as a follow-up this means "and the way back too",
+   * not "replace what I am looking at with the inbound leg only".
+   */
+  const addReturnLeg = async (): Promise<boolean> => {
+    const source = [...messages]
+      .reverse()
+      .find((m) => m.role === 'assistant' && m.slot && m.flights && m.flights.length > 0);
+    const previous = source?.slot;
+    if (!previous || !hasSearchContext(previous)) return false;
+
+    setLoadingPhase('searching');
+    setIsLoading(true);
+    try {
+      await handleParsedSlot({ ...previous, round_trip: true, return_only: false, missing: [] });
+    } finally {
+      setIsLoading(false);
+      setLoadingPhase('thinking');
+    }
+    return true;
+  };
+
+  /** A slot we can actually add a return leg to — it has somewhere to fly and
+   *  when to fly, so the inbound search is fully determined. */
+  const hasSearchContext = (slot: SlotJSON): boolean =>
+    Boolean(String(slot.destination ?? '').trim()) &&
+    Boolean((slot.date_from ?? '').trim() || (slot.date_to ?? '').trim());
+
   const currentPool = (): Flight[] =>
     [...messages].reverse().find((m) => m.role === 'assistant' && m.flights?.length)?.flights ?? [];
 
@@ -415,6 +456,19 @@ export const useChat = () => {
     const pool = currentPool();
     if (pool.length > 0 && isFollowUpDetail(text, pool)) {
       answerFromData(text, pool);
+      return;
+    }
+
+    // "show me the return tickets" against a search already on screen — add the
+    // inbound leg to it rather than starting over. Gated on the message naming
+    // no destination and no date of its own, so "return flights to Barcelona in
+    // October" is still a new round-trip search and goes through the model.
+    if (
+      isAddReturnLegQuery(text) &&
+      !destinationFromText(text) &&
+      !dateFromText(text) &&
+      (await addReturnLeg())
+    ) {
       return;
     }
 
