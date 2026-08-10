@@ -7,7 +7,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from './ui/dialog';
-import { Badge } from './ui/badge';
 import { getCityName } from '../lib/airportMap';
 import { Leaf, PlaneTakeoff, PlaneLanding, Users, ShieldCheck, Briefcase, Utensils } from 'lucide-react';
 
@@ -26,27 +25,18 @@ const formatLegDate = (dateStr: string) => {
     : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 };
 
-// Normal states stay quiet; only the exceptions carry an accent — amber for
-// Delayed, red for Cancelled.
+// No flight-status badge anywhere in this app. Every flight in the dataset is
+// future-dated and synthetic, so "Scheduled" / "On time" / "Delayed" asserted
+// knowledge the system cannot have. In testing that cost real decisions: one
+// participant avoided a flight she otherwise wanted because it read "Delayed",
+// and two asked how a future flight could have a status at all. The result
+// cards dropped it first (see FlightCard); it lived on here until opening a
+// card simply moved the same claim one click deeper.
 //
-// Status appears HERE only. The result cards deliberately carry no status badge
-// (see FlightCard) — on future-dated synthetic flights it claimed knowledge the
-// system cannot have, and in testing it steered a participant away from a flight
-// she wanted. This modal is opened deliberately, one flight at a time, rather
-// than scanned across a list, so the same label does not sit between the
-// participant and the comparison they came to make.
-const getStatusBadge = (status: Flight['flight_status']) => {
-  switch (status) {
-    case 'On time':
-      return <Badge className="bg-secondary text-muted-foreground border-transparent">On Time</Badge>;
-    case 'Delayed':
-      return <Badge className="bg-transparent text-accent-amber border-accent-amber/40">Delayed</Badge>;
-    case 'Cancelled':
-      return <Badge className="bg-transparent text-accent-red border-accent-red/40">Cancelled</Badge>;
-    default:
-      return <Badge className="bg-secondary text-muted-foreground border-transparent">Scheduled</Badge>;
-  }
-};
+// Cancellation is still visible where it matters — a cancelled leg renders
+// dimmed (see isCancelled below), the same treatment the cards use — and
+// cancelled flights are excluded from results altogether unless the user asks
+// for them through the status filter.
 
 const getDemandColor = (indicator: string) => {
   switch (indicator) {
@@ -95,7 +85,6 @@ const LegSection: React.FC<{ flight: Flight; leg: 'outbound' | 'return' | 'singl
         </span>
         <span className="ml-auto flex items-center gap-2">
           <span className="text-[11px] font-mono text-muted-foreground">{flight.flight_number}</span>
-          {getStatusBadge(flight.flight_status)}
         </span>
       </div>
 
