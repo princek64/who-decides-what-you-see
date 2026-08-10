@@ -27,7 +27,14 @@ const formatLegDate = (dateStr: string) => {
 };
 
 // Normal states stay quiet; only the exceptions carry an accent — amber for
-// Delayed, red for Cancelled. Mirrors StatusLabel's restraint in the results list.
+// Delayed, red for Cancelled.
+//
+// Status appears HERE only. The result cards deliberately carry no status badge
+// (see FlightCard) — on future-dated synthetic flights it claimed knowledge the
+// system cannot have, and in testing it steered a participant away from a flight
+// she wanted. This modal is opened deliberately, one flight at a time, rather
+// than scanned across a list, so the same label does not sit between the
+// participant and the comparison they came to make.
 const getStatusBadge = (status: Flight['flight_status']) => {
   switch (status) {
     case 'On time':
