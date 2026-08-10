@@ -3,6 +3,15 @@ import { isRoundTripItinerary } from '../hooks/useFlightFilter';
 import { AIRPORT_TO_CITY } from './airportMap';
 import { formatFlightDate } from './utils';
 import { cheapestBy } from './insights';
+import {
+  cheapestPair,
+  destinationLabel,
+  isTwoWayResult,
+  outboundLabel,
+  returnLabel,
+  splitLegs,
+} from './returnGroups';
+import type { LegGroups } from './returnGroups';
 
 export const LARGE_RESULT_THRESHOLD = 30;
 
@@ -26,11 +35,22 @@ export type ProseBlock =
   | { kind: 'paragraph'; nodes: ProseNode[] }
   | { kind: 'bullets'; items: ProseNode[][] };
 
+/** One labelled leg of a round trip, rendered as its own table. */
+export interface ProseTableGroup {
+  label: string;
+  flights: Flight[];
+  /** Rows matching the search beyond the ones shown, for the "of N" note. */
+  available: number;
+}
+
 export interface ProseAnswer {
   blocks: ProseBlock[];
   closing: ProseBlock[];
   text: string;
   table: Flight[] | null;
+  /** Set INSTEAD of `table` on a round trip: outbound first, return second,
+   *  each labelled, so the two legs are never one undifferentiated list. */
+  tableGroups: ProseTableGroup[] | null;
   tableShowsDate: boolean;
   displayed: number;
   available: number;
@@ -232,11 +252,94 @@ const nodesToMarkdown = (nodes: ProseNode[]): string =>
     .map((n) => (n.type === 'text' ? n.text : n.type === 'link' ? `${n.text} (${n.href})` : `**${n.text}**`))
     .join('');
 
+/**
+ * Round-trip answer: the two legs as two labelled tables rather than one merged
+ * price-sorted list. filterAndSortFlights returns outbound and inbound already
+ * interleaved, so without this the reader sees London → Paris and Paris →
+ * London rows alternating with nothing to tell them apart.
+ *
+ * The closing line prices the trip as a trip — cheapest outbound plus cheapest
+ * return — which is the number a round-trip search is actually asking for, and
+ * which no single row in either table shows.
+ */
+const buildRoundTripAnswer = (
+  results: Flight[],
+  intent: IntentJSON,
+  legs: LegGroups
+): ProseAnswer => {
+  const destination = destinationLabel(legs, intent);
+  const constraints = describeConstraints(intent);
+  const outVisible = legs.outbound.slice(0, TABLE_PREVIEW_ROWS);
+  const inVisible = legs.inbound.slice(0, TABLE_PREVIEW_ROWS);
+
+  // A leg with no flights is stated rather than silently missing: an empty
+  // table under a heading reads as a loading failure, and the reader needs to
+  // know WHICH half of the trip has nothing before the totals make sense.
+  const missing =
+    legs.outbound.length === 0
+      ? 'outbound'
+      : legs.inbound.length === 0
+        ? 'return'
+        : null;
+
+  const lead = missing
+    ? `I found ${plural(results.length, 'flight')}${constraints}, but nothing on the ${missing} leg — here is what there is:`
+    : `Here is the round trip${constraints} — ${plural(legs.outbound.length, 'outbound flight')} and ${plural(legs.inbound.length, 'return flight')}:`;
+
+  const blocks: ProseBlock[] = [
+    { kind: 'paragraph', nodes: [{ type: 'text', text: lead }] },
+  ];
+
+  const pair = cheapestPair(legs);
+  const closing: ProseBlock[] = [];
+  if (pair) {
+    closing.push({
+      kind: 'paragraph',
+      nodes: [
+        { type: 'text', text: 'Cheapest round trip: ' },
+        { type: 'strong', text: money(pair.total) },
+        {
+          type: 'text',
+          text:
+            ` — ${pair.outbound.airline_name} out at ${money(pair.outbound.price_gbp)}` +
+            ` plus ${pair.inbound.airline_name} back at ${money(pair.inbound.price_gbp)}.`,
+        },
+      ],
+    });
+  }
+
+  // Dates vary across a round trip by definition (the legs are on different
+  // days), so the date column always earns its place here.
+  const tableGroups: ProseTableGroup[] = [
+    { label: outboundLabel(destination), flights: outVisible, available: legs.outbound.length },
+    { label: returnLabel(destination), flights: inVisible, available: legs.inbound.length },
+  ];
+
+  return {
+    blocks,
+    closing,
+    text: closing.length > 0 ? `${blocksToText(blocks)}\n\n${blocksToText(closing)}` : blocksToText(blocks),
+    table: null,
+    tableGroups,
+    tableShowsDate: true,
+    displayed: outVisible.length + inVisible.length,
+    available: results.length,
+  };
+};
+
 export const buildProseAnswer = (
   results: Flight[],
   intent: IntentJSON,
   opts: ProseOptions = {}
 ): ProseAnswer => {
+  // Round trips split into labelled legs before any of the one-way shaping
+  // below runs. The direct-only display rule in particular must not apply here:
+  // dropping the connecting flights from one leg only would silently answer a
+  // different question on each half of the trip.
+  if (isTwoWayResult(intent) && results.length > 0) {
+    return buildRoundTripAnswer(results, intent, splitLegs(results));
+  }
+
   const directs = results.filter((f) => f.stops === 0);
   const mixed = directs.length > 0 && directs.length < results.length;
   // Only hide stops when the user has not pinned the stop count themselves.
@@ -278,6 +381,7 @@ export const buildProseAnswer = (
       closing: [],
       text: blocksToText(blocks),
       table: null,
+      tableGroups: null,
       tableShowsDate: withDate,
       displayed: 1,
       available: 1,
@@ -303,6 +407,7 @@ export const buildProseAnswer = (
       closing: [],
       text: blocksToText(blocks),
       table: null,
+      tableGroups: null,
       tableShowsDate: withDate,
       displayed: visible,
       available: count,
@@ -336,6 +441,7 @@ export const buildProseAnswer = (
     closing,
     text: `${blocksToText(blocks)}\n\n${blocksToText(closing)}`,
     table: shown.slice(0, visible),
+    tableGroups: null,
     tableShowsDate: withDate,
     displayed: visible,
     available: count,

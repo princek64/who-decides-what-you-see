@@ -22,12 +22,19 @@ import {
   dateFromText,
 } from '../lib/returnLeg';
 import { buildItinerary, nearbyAlternatives } from '../lib/layoutData';
+import { placeScreen } from '../lib/screenHistory';
 import type { ItineraryPair, AlertAlternatives } from '../lib/layoutData';
 
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   text: string;
+  /** The user query this screen answers. Recorded on the screen itself so a
+   *  superseded screen can still label itself in the history stack — walking
+   *  back through `messages` for the nearest preceding user message stops
+   *  working once a screen is refined in place, since the refinement's own
+   *  query is appended after it. */
+  query?: string;
   intent?: IntentJSON & { layout?: string };
   /** Set on a system message the user can simply re-send (rate limit / 5xx),
    *  as opposed to one that needs the researcher (bad API key). */
@@ -253,9 +260,13 @@ export const useGenChat = () => {
   };
 
   // Filter + generative-layout pipeline for an already-resolved intent, then
-  // append the assistant screen. Shared by fresh LLM queries (sendMessage) and
+  // land the assistant screen. Shared by fresh LLM queries (sendMessage) and
   // deterministic refinements (refineView) so both compose the SAME way.
-  const applyIntent = async (intent: IntentJSON & { layout?: string }) => {
+  //
+  // `query` is the wording that produced this screen — the typed message, or a
+  // chip's label. It rides on the screen so a superseded one can label itself
+  // in the history stack.
+  const applyIntent = async (intent: IntentJSON & { layout?: string }, query: string) => {
     // Everything the caller answers without looking anything up (off-topic,
     // too-broad, unknown city) has already returned by now. From here it is
     // actually searching the dataset, so show that step before the screen lands.
@@ -290,12 +301,12 @@ export const useGenChat = () => {
 
     const aiReply = generateNaturalReply(intent, filteredResults.length, layout);
 
-    setMessages((prev) => [
-      ...prev,
-      {
+    setMessages((prev) =>
+      placeScreen(prev, {
         id: `ai-${Date.now()}`,
         role: 'assistant',
         text: aiReply,
+        query,
         intent: intent || {},
         flights: filteredResults,
         layout,
@@ -303,8 +314,8 @@ export const useGenChat = () => {
         alternatives,
         isExpanded: false,
         timestamp: Date.now(),
-      },
-    ]);
+      })
+    );
   };
 
   // Deterministic refinement of the CURRENT view (the "Refine this view" chips
@@ -339,7 +350,7 @@ export const useGenChat = () => {
     setLoadingPhase('searching');
     setIsLoading(true);
     try {
-      await applyIntent(merged);
+      await applyIntent(merged, label);
     } finally {
       setIsLoading(false);
       setLoadingPhase('thinking');
@@ -559,7 +570,7 @@ export const useGenChat = () => {
         intent.direction = 'return';
       }
 
-      await applyIntent(intent);
+      await applyIntent(intent, text);
     } catch (err: any) {
       console.error('[Groq API Error]', err?.status, err);
       const message = friendlyApiError(err);

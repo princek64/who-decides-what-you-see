@@ -3,6 +3,8 @@ import { useGenChat } from '../hooks/useGenChat';
 import { useSessionLogger } from '../hooks/useSessionLogger';
 import { useTypewriterPlaceholder } from '../hooks/useTypewriterPlaceholder';
 import { GenScreen } from './GenScreen';
+import { ScreenHistoryRow } from './ScreenHistoryRow';
+import { visibleHistory } from '../lib/screenHistory';
 import { FlightDetailModal } from './FlightDetailModal';
 import type { Flight } from '../hooks/useFlightFilter';
 import { Button } from './ui/button';
@@ -51,24 +53,42 @@ export const ChatView: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // The canvas shows ONE screen: the latest assistant/system response,
-  // paired with the user query that produced it. Older exchanges stay in
-  // `messages` (and in the session log) but are no longer rendered.
+  // The canvas shows the latest assistant/system response in full, with the
+  // user query that produced it. Screens it superseded are not thrown away:
+  // the most recent MAX_HISTORY_SCREENS of them sit above it as collapsed
+  // one-line rows the participant can re-open. Anything older stays in
+  // `messages` (and in the session log) but leaves the canvas.
   let screenMessage = null;
   let screenQuery = '';
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role !== 'user') {
       screenMessage = messages[i];
-      for (let j = i - 1; j >= 0; j--) {
-        if (messages[j].role === 'user') {
-          screenQuery = messages[j].text;
-          break;
+      // Screens carry their own query; the backward scan is the fallback for
+      // anything recorded before that (and for system messages, which have no
+      // query of their own).
+      screenQuery = messages[i].query ?? '';
+      if (!screenQuery) {
+        for (let j = i - 1; j >= 0; j--) {
+          if (messages[j].role === 'user') {
+            screenQuery = messages[j].text;
+            break;
+          }
         }
       }
       break;
     }
   }
   const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.text;
+
+  // Refinements replace the screen they refine (see applyIntent), so every
+  // assistant message still in the list is a screen the user actually
+  // navigated away from — no filtering for near-duplicates is needed here.
+  const historyScreens =
+    screenMessage?.role === 'assistant' ? visibleHistory(messages, screenMessage.id) : [];
+
+  // Which collapsed screen, if any, is currently opened back up. Only one at a
+  // time: two full screens plus the current one is the clutter this replaced.
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   // Each rebuilt screen starts at the top of the canvas
   useEffect(() => {
@@ -79,6 +99,13 @@ export const ChatView: React.FC = () => {
   useEffect(() => {
     if (!csvLoading) inputRef.current?.focus();
   }, [csvLoading]);
+
+  // Starting over clears the history stack too — leaving a previous search's
+  // row on a blank canvas would outlive the search it belongs to.
+  const startNewSearch = () => {
+    setExpandedHistoryId(null);
+    clearConversation();
+  };
 
   const submitMessage = () => {
     if (!inputText.trim() || isLoading) return;
@@ -105,7 +132,7 @@ export const ChatView: React.FC = () => {
           type="button"
           variant="outline"
           size="icon"
-          onClick={clearConversation}
+          onClick={startNewSearch}
           disabled={isLoading}
           title="Start a new search"
           className="rounded-full border-border bg-transparent hover:bg-muted text-muted-foreground hover:text-accent-red disabled:opacity-40 transition-colors w-11 h-11 shrink-0"
@@ -175,7 +202,7 @@ export const ChatView: React.FC = () => {
       <header className="sticky top-0 z-10 flex items-center justify-between px-6 h-14 bg-background border-b border-border">
         <button
           type="button"
-          onClick={() => messages.length > 0 && !isLoading && clearConversation()}
+          onClick={() => messages.length > 0 && !isLoading && startNewSearch()}
           disabled={messages.length === 0 || isLoading}
           aria-label={messages.length > 0 ? 'Start a new search' : 'Flight Explorer'}
           className={`flex items-center gap-2.5 rounded-full -mx-1.5 px-1.5 py-1 transition-colors ${messages.length > 0 && !isLoading ? 'hover:bg-muted cursor-pointer' : 'cursor-default'}`}
@@ -260,6 +287,39 @@ export const ChatView: React.FC = () => {
                   <FlightSketchLogo size={14} className="text-foreground animate-pulse shrink-0" />
                   <SearchSteps phase={loadingPhase} compact />
                 </div>
+              </div>
+            )}
+
+            {/* Superseded screens, newest nearest the current one. Collapsed to
+                a row each; expanding one renders it in full above the current
+                answer, without its refine/regenerate controls — it is there to
+                be read back, not to be worked on in place of the live screen. */}
+            {historyScreens.length > 0 && (
+              <div className="mx-auto w-full max-w-6xl px-4 md:px-8 pt-6 space-y-2">
+                <div className="text-[11px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
+                  Earlier in this search
+                </div>
+                {historyScreens.map((past) => (
+                  <div key={past.id} className="space-y-2">
+                    <ScreenHistoryRow
+                      message={past}
+                      isExpanded={expandedHistoryId === past.id}
+                      onToggle={() =>
+                        setExpandedHistoryId((current) => (current === past.id ? null : past.id))
+                      }
+                    />
+                    {expandedHistoryId === past.id && (
+                      <div className="border border-border rounded-lg overflow-hidden">
+                        <GenScreen
+                          query={past.query ?? ''}
+                          message={past}
+                          onToggleExpand={toggleExpandMessage}
+                          onSelectFlight={handleSelectFlight}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 
