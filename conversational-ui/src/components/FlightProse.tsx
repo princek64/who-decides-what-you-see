@@ -26,6 +26,65 @@ export const FlightProse: React.FC<FlightProseProps> = ({
   const linkClass =
     'text-muted-foreground hover:text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground transition-colors';
 
+  // One table body, shared by the flat one-way table and each labelled leg of a
+  // round trip, so the two presentations can never drift into showing different
+  // columns for the same flight.
+  const flightTable = (tableRows: typeof rows, showDate: boolean) => (
+    <div className="w-full overflow-x-auto">
+      <table className="w-full text-left text-[13px] border-collapse">
+        <thead>
+          <tr className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+            <th className={`${cell} font-medium`}>Airline</th>
+            {showDate && <th className={`${cell} font-medium`}>Date</th>}
+            <th className={`${cell} font-medium`}>Depart</th>
+            <th className={`${cell} font-medium`}>Arrive</th>
+            <th className={`${cell} font-medium`}>Duration</th>
+            <th className={`${cell} font-medium`}>Stops</th>
+            <th className={`${cell} font-medium`}>Price</th>
+            <th className={`${cell} font-medium pr-0`} />
+          </tr>
+        </thead>
+        <tbody>
+          {tableRows.map((f) => (
+            <tr key={f.flight_id} className="border-t border-border">
+              <td className={cell}>
+                {f.airline_name}{' '}
+                <span className="font-mono text-muted-foreground">{f.flight_number}</span>
+              </td>
+              {showDate && <td className={cell}>{formatFlightDate(f.date)}</td>}
+              <td className={`${cell} font-mono tabular-nums`}>
+                {f.departure_time} <span className="text-muted-foreground">{f.origin_code}</span>
+              </td>
+              <td className={cell}>
+                <span className="font-mono tabular-nums">{f.arrival_time}</span>{' '}
+                <span className="text-muted-foreground">
+                  {getCityName(f.dest_code)} ({f.dest_code})
+                </span>
+              </td>
+              <td className={`${cell} font-mono tabular-nums text-muted-foreground`}>
+                {f.duration_formatted}
+              </td>
+              <td className={`${cell} text-muted-foreground`}>
+                {f.stops === 0 ? 'Direct' : `${f.stops} stop${f.stops === 1 ? '' : 's'}`}
+              </td>
+              <td className={`${cell} font-mono tabular-nums`}>£{f.price_gbp.toFixed(2)}</td>
+              <td className={`${cell} pr-0`}>
+                <a
+                  href={bookingHref(f)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1 px-2.5 transition-colors whitespace-nowrap"
+                >
+                  Book on {f.airline_name}
+                </a>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   const renderNodes = (nodes: ProseNode[]) =>
     nodes.map((node, i) => {
       if (node.type === 'text') return <React.Fragment key={i}>{node.text}</React.Fragment>;
@@ -67,66 +126,40 @@ export const FlightProse: React.FC<FlightProseProps> = ({
     <div className="w-full text-sm leading-relaxed text-foreground">
       {renderBlocks(answer.blocks)}
 
-      {answer.table && (
-        <div className="mt-3 w-full overflow-x-auto">
-          <table className="w-full text-left text-[13px] border-collapse">
-            <thead>
-              <tr className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
-                <th className={`${cell} font-medium`}>Airline</th>
-                {answer.tableShowsDate && <th className={`${cell} font-medium`}>Date</th>}
-                <th className={`${cell} font-medium`}>Depart</th>
-                <th className={`${cell} font-medium`}>Arrive</th>
-                <th className={`${cell} font-medium`}>Duration</th>
-                <th className={`${cell} font-medium`}>Stops</th>
-                <th className={`${cell} font-medium`}>Price</th>
-                <th className={`${cell} font-medium pr-0`} />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((f) => (
-                <tr key={f.flight_id} className="border-t border-border">
-                  <td className={cell}>
-                    {f.airline_name}{' '}
-                    <span className="font-mono text-muted-foreground">{f.flight_number}</span>
-                  </td>
-                  {answer.tableShowsDate && (
-                    <td className={cell}>{formatFlightDate(f.date)}</td>
-                  )}
-                  <td className={`${cell} font-mono tabular-nums`}>
-                    {f.departure_time}{' '}
-                    <span className="text-muted-foreground">{f.origin_code}</span>
-                  </td>
-                  <td className={cell}>
-                    <span className="font-mono tabular-nums">{f.arrival_time}</span>{' '}
-                    <span className="text-muted-foreground">
-                      {getCityName(f.dest_code)} ({f.dest_code})
-                    </span>
-                  </td>
-                  <td className={`${cell} font-mono tabular-nums text-muted-foreground`}>
-                    {f.duration_formatted}
-                  </td>
-                  <td className={`${cell} text-muted-foreground`}>
-                    {f.stops === 0 ? 'Direct' : `${f.stops} stop${f.stops === 1 ? '' : 's'}`}
-                  </td>
-                  <td className={`${cell} font-mono tabular-nums`}>
-                    £{f.price_gbp.toFixed(2)}
-                  </td>
-                  <td className={`${cell} pr-0`}>
-                    <a
-                      href={bookingHref(f)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1 px-2.5 transition-colors whitespace-nowrap"
-                    >
-                      Book on {f.airline_name}
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {answer.table && <div className="mt-3">{flightTable(rows, answer.tableShowsDate)}</div>}
+
+      {/* Round trip: one labelled table per leg, outbound first, with a rule
+          between them. The heading names both ends of the leg in the direction
+          it flies, which is the fact participants could not recover from the
+          merged table. */}
+      {answer.tableGroups?.map((group, i) => (
+        <section
+          key={group.label}
+          className={
+            i === 0
+              ? 'mt-3'
+              : 'mt-5 pt-5 border-t border-border'
+          }
+        >
+          <h4 className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1.5">
+            {group.label}
+          </h4>
+          {group.flights.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground py-2">
+              No flights on this leg match the search.
+            </p>
+          ) : (
+            <>
+              {flightTable(group.flights, answer.tableShowsDate)}
+              {group.available > group.flights.length && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                  Showing {group.flights.length} of {group.available}, cheapest first.
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      ))}
 
       {/* Closing recommendation sits under the table, where the reader lands */}
       {answer.closing.length > 0 && (

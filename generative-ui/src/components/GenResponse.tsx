@@ -13,6 +13,17 @@ import { BudgetView } from './layouts/BudgetView';
 import { RankedView } from './layouts/RankedView';
 import { AlertView } from './layouts/AlertView';
 import { MultiLegView } from './layouts/MultiLegView';
+import { ReturnGroupedView } from './layouts/ReturnGroupedView';
+import { isTwoWayResult } from '../lib/returnGroups';
+
+/**
+ * Layouts that do NOT render a flat list of individual flights, so a merged
+ * round-trip result set cannot confuse the two legs inside them: the aggregate
+ * views summarise across dates or destinations rather than listing rows, alert
+ * is the zero-result state, and itinerary already presents an outbound/return
+ * pair with each leg labelled.
+ */
+const LEG_SAFE_LAYOUTS = new Set(['calendar', 'destinations', 'map', 'trend', 'alert']);
 
 interface GenResponseProps {
   message: ChatMessage;
@@ -37,6 +48,19 @@ export const GenResponse: React.FC<GenResponseProps> = ({
   const flights = message.flights ?? [];
   const intent = message.intent ?? {};
   const layout = message.layout ?? 'grid';
+
+  // A round trip handed to any list layout arrives as one price-sorted array
+  // with both legs interleaved, and nothing in those layouts says which row
+  // flies which way. Group and label the legs instead. The itinerary layout is
+  // exempt only when it actually has a pair to show — its fallback is the flat
+  // carousel, which has the same problem.
+  const isRoundTrip = isTwoWayResult(intent) && flights.length > 0;
+  const hasLabelledPair = layout === 'itinerary' && Boolean(message.itinerary);
+  if (isRoundTrip && !LEG_SAFE_LAYOUTS.has(layout) && !hasLabelledPair) {
+    return (
+      <ReturnGroupedView flights={flights} intent={intent} onSelectFlight={onSelectFlight} />
+    );
+  }
 
   switch (layout) {
     case 'highlight':
