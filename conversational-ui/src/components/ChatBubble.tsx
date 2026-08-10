@@ -201,6 +201,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             flights={message.flights!}
             intent={message.intent || {}}
             keepStops={Boolean(message.slot?.compare || message.slot?.cheapest_when)}
+            showAll={Boolean(message.showAll)}
           />
         </>
       ) : (

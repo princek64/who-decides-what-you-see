@@ -58,7 +58,21 @@ export interface ProseAnswer {
 
 export interface ProseOptions {
   keepStops?: boolean;
+  /** The user asked to see everything ("show me all options"). Lays the whole
+   *  result set out as a table instead of summarising a preview of it. */
+  showAll?: boolean;
 }
+
+/**
+ * Ceiling on rows rendered for an explicit "show me all" request.
+ *
+ * "All" is taken literally up to this point. Past it the honest thing is to say
+ * how many there are rather than to render them: the thread is not virtualised,
+ * so an undated "anywhere" search (which can match thousands) would lock the tab
+ * trying to lay out every row, and a list that long stops being readable well
+ * before it stops being expensive.
+ */
+export const SHOW_ALL_MAX_ROWS = 100;
 
 // "London Gatwick" -> "Gatwick"; unknown codes fall back to the code itself.
 const airportLabel = (code: string): string => {
@@ -261,16 +275,22 @@ const nodesToMarkdown = (nodes: ProseNode[]): string =>
  * The closing line prices the trip as a trip — cheapest outbound plus cheapest
  * return — which is the number a round-trip search is actually asking for, and
  * which no single row in either table shows.
+ *
+ * `showAll` lifts the per-leg preview cap for an explicit "show me all options".
+ * The grouping still applies: a round trip asked for in full wants every flight
+ * on each leg, not both legs poured back into one flat list.
  */
 const buildRoundTripAnswer = (
   results: Flight[],
   intent: IntentJSON,
-  legs: LegGroups
+  legs: LegGroups,
+  showAll = false
 ): ProseAnswer => {
   const destination = destinationLabel(legs, intent);
   const constraints = describeConstraints(intent);
-  const outVisible = legs.outbound.slice(0, TABLE_PREVIEW_ROWS);
-  const inVisible = legs.inbound.slice(0, TABLE_PREVIEW_ROWS);
+  const perLeg = showAll ? SHOW_ALL_MAX_ROWS : TABLE_PREVIEW_ROWS;
+  const outVisible = legs.outbound.slice(0, perLeg);
+  const inVisible = legs.inbound.slice(0, perLeg);
 
   // A leg with no flights is stated rather than silently missing: an empty
   // table under a heading reads as a loading failure, and the reader needs to
@@ -327,6 +347,44 @@ const buildRoundTripAnswer = (
   };
 };
 
+/**
+ * The whole result set as one table, for an explicit "show me all options".
+ *
+ * Runs ahead of every shaping rule below, and deliberately so. The direct-only
+ * display rule, the bullets-vs-table switch and the TABLE_PREVIEW_ROWS cap all
+ * exist to keep a FIRST answer short; applied to a request for everything they
+ * would hide part of the answer the user just asked to see in full. The lead
+ * sentence states the count so the list is anchored, and the closing line still
+ * names the cheapest, which is the one thing a long table buries.
+ */
+const buildShowAllAnswer = (results: Flight[], intent: IntentJSON): ProseAnswer => {
+  const visible = results.slice(0, SHOW_ALL_MAX_ROWS);
+  const truncated = results.length > visible.length;
+  const constraints = describeConstraints(intent);
+  const cheapest = cheapestBy(results) as Flight;
+  // Dates are shown per row whenever the set spans more than one, so a full
+  // list never leaves a row ambiguous about which day it is.
+  const withDate = new Set(results.map((f) => f.date)).size > 1;
+
+  const lead = truncated
+    ? `Here are ${plural(results.length, 'flight')}${constraints} — showing the first ${visible.length}, sorted by ${intent.sort_by || 'cheapest'} first:`
+    : `Here ${results.length === 1 ? 'is' : 'are'} all ${plural(results.length, 'flight')}${constraints}, sorted by ${intent.sort_by || 'cheapest'} first:`;
+
+  const blocks: ProseBlock[] = [{ kind: 'paragraph', nodes: [{ type: 'text', text: lead }] }];
+  const closing: ProseBlock[] = [{ kind: 'paragraph', nodes: cheapestLine(cheapest) }];
+
+  return {
+    blocks,
+    closing,
+    text: `${blocksToText(blocks)}\n\n${blocksToText(closing)}`,
+    table: visible,
+    tableGroups: null,
+    tableShowsDate: withDate,
+    displayed: visible.length,
+    available: results.length,
+  };
+};
+
 export const buildProseAnswer = (
   results: Flight[],
   intent: IntentJSON,
@@ -336,9 +394,15 @@ export const buildProseAnswer = (
   // below runs. The direct-only display rule in particular must not apply here:
   // dropping the connecting flights from one leg only would silently answer a
   // different question on each half of the trip.
+  //
+  // This is checked BEFORE showAll: "show me all options" on a round trip means
+  // every flight on each leg, still labelled. Flattening them into one table
+  // would hand back exactly the interleaved list the grouping exists to undo.
   if (isTwoWayResult(intent) && results.length > 0) {
-    return buildRoundTripAnswer(results, intent, splitLegs(results));
+    return buildRoundTripAnswer(results, intent, splitLegs(results), Boolean(opts.showAll));
   }
+
+  if (opts.showAll && results.length > 0) return buildShowAllAnswer(results, intent);
 
   const directs = results.filter((f) => f.stops === 0);
   const mixed = directs.length > 0 && directs.length < results.length;
