@@ -159,9 +159,42 @@ export const isLowCo2Query = (text: string): boolean =>
 // noun phrase means a ROUND TRIP ticket, not "just the leg back." Show both
 // directions, same as picking a city from a budget/anywhere search.
 export const isRoundTripQuery = (text: string): boolean =>
-  /\breturn\s+flights?\b/i.test(text) ||
+  // "return flight(s)" / "return trip" / "return ticket(s)" — the noun varies,
+  // the meaning does not. Matching only "flight" sent "the cheapest return TRIP
+  // to Paris" down the one-way path, which is how a round-trip request came
+  // back with outbound flights only.
+  /\breturn\s+(?:flights?|trips?|tickets?|fares?|journeys?)\b/i.test(text) ||
   /\bround[- ]trip\b/i.test(text) ||
-  /\bthere\s+and\s+back\b/i.test(text);
+  /\bthere\s+and\s+back\b/i.test(text) ||
+  /\bout\s+and\s+back\b/i.test(text) ||
+  /\bboth\s+ways\b/i.test(text) ||
+  /\bgoing\s+and\s+coming\s+back\b/i.test(text) ||
+  /\b(?:fly|flying|travel|travelling|traveling)\s+(?:out\s+)?and\s+back\b/i.test(text);
+
+/**
+ * A follow-up asking for the return leg of the search already on screen:
+ * "show me the return tickets", "what about coming back", "return flights",
+ * "flights back", "and the way back".
+ *
+ * Distinct from isReturnOnlyQuery, which answers a request that names its own
+ * destination and date ("a flight back from Barcelona on 20 September") with the
+ * inbound leg alone. As a follow-up to an outbound search the same wording means
+ * something different — add the way home to what I already have — so the answer
+ * is BOTH legs, and the existing destination, dates and constraints carry
+ * forward untouched.
+ *
+ * Callers gate this on the message naming no destination and no date of its own,
+ * so a fresh "return flights to Barcelona in October" is still a new search.
+ */
+export const isAddReturnLegQuery = (text: string): boolean =>
+  /\b(?:show|see|get|give|find|add|include)\b[^.?!]{0,20}\breturn\s+(?:flights?|trips?|tickets?|fares?|legs?|journeys?)\b/i.test(text) ||
+  /\bwhat\s+about\s+(?:the\s+)?(?:coming\s+back|getting\s+back|the\s+way\s+back|the\s+return)\b/i.test(text) ||
+  /\b(?:and\s+)?(?:the\s+)?way\s+back\b/i.test(text) ||
+  /\b(?:what|how)\s+about\s+(?:flights?\s+)?back\b/i.test(text) ||
+  /^\s*(?:and\s+)?(?:the\s+)?return(?:\s+leg)?\s*[.?!]?\s*$/i.test(text) ||
+  /\breturn\s+(?:flights?|tickets?)\b/i.test(text) ||
+  /\bflights?\s+back\b/i.test(text) ||
+  /\bcoming\s+back\b/i.test(text);
 
 // "flight back from Barcelona" / "the return leg" — unlike bare "return
 // flight(s)" above, these specifically single out the INBOUND leg only.
