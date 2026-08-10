@@ -15,7 +15,12 @@ import {
   sleep,
 } from '../lib/apiRetry';
 import { loadFlightData } from '../lib/flightData';
-import { isReturnOnlyQuery, destinationFromText, dateFromText } from '../lib/returnLeg';
+import {
+  isReturnOnlyQuery,
+  isPureRefinement,
+  destinationFromText,
+  dateFromText,
+} from '../lib/returnLeg';
 import { buildItinerary, nearbyAlternatives } from '../lib/layoutData';
 import type { ItineraryPair, AlertAlternatives } from '../lib/layoutData';
 
@@ -356,6 +361,14 @@ export const useGenChat = () => {
     setLoadingPhase('thinking');
     setIsLoading(true);
 
+    // The intent behind the screen currently on the canvas. A typed refinement
+    // composes onto it the same way a "Refine this view" chip composes onto
+    // base.intent in refineView — until now only the chips did, so typing the
+    // refinement instead of clicking it silently lost every established slot.
+    const previousIntent =
+      ([...messages].reverse().find((m) => m.role === 'assistant' && m.intent)?.intent ??
+        null) as (IntentJSON & { layout?: string }) | null;
+
     try {
       let rawContent = await callGroqWithBackoff(text, messages);
       // Dev-only: dumps the full raw model JSON per query. Gated so it never
@@ -414,6 +427,48 @@ export const useGenChat = () => {
           const date = dateFromText(text);
           if (date) intent.date = date;
         }
+      }
+
+      // General date backstop. The return-leg branch above only runs on
+      // return-leg wording, so a date the model dropped on any OTHER phrasing
+      // was never recovered — the turn fell through to "that search is a little
+      // too broad" or searched the whole window, for a date the user had
+      // plainly written. Stacking constraints into one sentence ("... on
+      // November 21st after 6pm under £80") is where that was reported. Runs
+      // only when the model returned no date at all, so anything it did extract
+      // is left alone.
+      if (!intent.date?.trim() && !intent.date_from?.trim() && !intent.date_to?.trim()) {
+        const date = dateFromText(text);
+        if (date) intent.date = date;
+      }
+
+      // A typed refinement of the screen on the canvas ("show me the other
+      // flight", "what about the one with a stop"). Only the last three USER
+      // messages are sent as history, so once the turn carrying the date falls
+      // out of that window the model answers these cold — and cold it echoes a
+      // destination and date out of the system prompt's few-shot examples
+      // instead of returning nothing, so the screen jumps to a city the user
+      // never asked for. Drop the fields the user did not type, then compose
+      // onto the previous intent exactly as refineView does for the chips: the
+      // established slots form the base, and whatever the model DID extract
+      // from this message (a stop, a time window, a price cap) overrides them.
+      if (previousIntent && isPureRefinement(text)) {
+        // A refinement of the current results is a flight turn by definition,
+        // and off_topic short-circuits ahead of everything below.
+        intent.off_topic = false;
+        const {
+          dest_city: _destCity,
+          dest_code: _destCode,
+          date: _date,
+          date_from: _dateFrom,
+          date_to: _dateTo,
+          ...refinements
+        } = intent;
+        intent = {
+          ...previousIntent,
+          ...refinements,
+          layout: refinements.layout ?? previousIntent.layout,
+        };
       }
 
       // Off-topic messages: answer politely instead of dumping the whole dataset
