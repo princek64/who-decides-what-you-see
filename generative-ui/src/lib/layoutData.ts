@@ -103,6 +103,48 @@ export const splitComparison = (flights: Flight[]): ComparisonPair => {
   };
 };
 
+/** Rows shown per group before the "show all" toggle. */
+export const COMPARISON_PREVIEW_ROWS = 4;
+
+export interface StopGroup {
+  stops: number;
+  label: string;
+  /** Cheapest first, regardless of the sort applied to the result set: the
+   *  question a comparison asks is what each kind of journey costs. */
+  flights: Flight[];
+}
+
+export const stopsGroupLabel = (stops: number): string =>
+  stops === 0 ? 'Direct flights' : `${stops}-stop flights`;
+
+/**
+ * Every matching flight, bucketed by how many stops it makes, fewest stops
+ * first.
+ *
+ * The comparison screen used to show ONE direct and ONE connecting flight and
+ * silently drop the rest — a participant who could see six results in an
+ * earlier screen asked why only two were left. Grouping keeps the direct/
+ * connecting contrast the comparison exists for while accounting for every
+ * flight that qualified. Buckets are derived from the data rather than hard-
+ * coded to 0 and 1, so a 2-stop result is labelled and shown instead of
+ * vanishing for want of a heading.
+ */
+export const groupByStops = (flights: Flight[]): StopGroup[] => {
+  const buckets = new Map<number, Flight[]>();
+  for (const f of flights) {
+    const bucket = buckets.get(f.stops);
+    if (bucket) bucket.push(f);
+    else buckets.set(f.stops, [f]);
+  }
+  return [...buckets.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([stops, group]) => ({
+      stops,
+      label: stopsGroupLabel(stops),
+      flights: [...group].sort((a, b) => a.price_gbp - b.price_gbp),
+    }));
+};
+
 export interface ParsedLayover {
   code: string;
   city: string;
