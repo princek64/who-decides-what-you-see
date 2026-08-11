@@ -57,8 +57,16 @@ export const cheapestBy = (pool: Flight[]): Flight | null => {
 // SAME `results` array the cards/table render from; only the prose shape
 // changed, not the numbers.
 export const buildComparisonSentence = (results: Flight[], destLabel: string): string | null => {
-  const direct = cheapestBy(results.filter((f) => f.stops === 0));
-  const connecting = cheapestBy(results.filter((f) => f.stops >= 1));
+  // A one-way "to Rome" compare must use outbound legs only. When a prior
+  // round-trip flag leaked into the search, the cheapest "direct to Rome" was
+  // sometimes a Rome→London return fare.
+  const legs = splitLegs(results);
+  const pool =
+    legs.outbound.length > 0
+      ? legs.outbound
+      : results.filter((f) => f.direction !== 'return');
+  const direct = cheapestBy(pool.filter((f) => f.stops === 0));
+  const connecting = cheapestBy(pool.filter((f) => f.stops >= 1));
   const dest = destLabel ? ` to ${destLabel}` : '';
   if (!direct && !connecting) return null;
   if (direct && !connecting) {
@@ -138,9 +146,9 @@ export const buildCheapestWhenSentence = (
   const pair = cheapestPair(legs);
   if (pair) {
     return (
-      `The cheapest ${label} return${dest} is from £${pair.outbound.price_gbp.toFixed(2)} ` +
-      `outbound on ${formatFlightDate(pair.outbound.date)} plus £${pair.inbound.price_gbp.toFixed(2)} ` +
-      `return on ${formatFlightDate(pair.inbound.date)} (total £${pair.total.toFixed(2)}).`
+      `The cheapest ${label} return${dest} is £${pair.total.toFixed(2)} total — ` +
+      `£${pair.outbound.price_gbp.toFixed(2)} outbound on ${formatFlightDate(pair.outbound.date)} ` +
+      `and £${pair.inbound.price_gbp.toFixed(2)} return on ${formatFlightDate(pair.inbound.date)}.`
     );
   }
 

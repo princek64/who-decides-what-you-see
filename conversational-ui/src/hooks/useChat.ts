@@ -10,6 +10,7 @@ import {
   destinationFromText,
   dateFromText,
   isShowAllQuery,
+  isPickBestQuery,
   classifyOrigin,
   datesQuestionFor,
   firstMissingRequiredSlot,
@@ -19,14 +20,15 @@ import {
   SLOT_QUESTIONS,
 } from '../lib/slots';
 import type { SlotJSON } from '../lib/slots';
-import { buildComparisonSentence, buildCheapestWhenSentence } from '../lib/insights';
+import { buildComparisonSentence, buildCheapestWhenSentence, cheapestBy } from '../lib/insights';
 import {
   MAX_API_RETRIES,
   friendlyApiError,
-  isRetryableStatus,
+  isRetryableError,
   retryDelayMs,
   sleep,
 } from '../lib/apiRetry';
+import { matchStudyTaskSlot } from '../lib/studyTasks';
 import { useSessionLogger } from './useSessionLogger';
 import { buildProseAnswer, describeConstraints } from '../lib/prose';
 import {
@@ -36,6 +38,8 @@ import {
   resolveTargets,
 } from '../lib/detailAnswers';
 import type { DetailField } from '../lib/detailAnswers';
+import { cheapestPair, splitLegs } from '../lib/returnGroups';
+import { formatFlightDate } from '../lib/utils';
 
 export interface ChatMessage {
   id: string;
@@ -213,13 +217,14 @@ export const useChat = () => {
         return await callGroq(userMessage, isRetry);
       } catch (err: any) {
         const status: number | undefined = err?.status;
-        const retryable = isRetryableStatus(status);
+        const retryable = isRetryableError(err);
 
         logAiResponse({
           api_error: true,
           status: status ?? null,
           attempt: attempt + 1,
           retryable,
+          daily_quota: !retryable && status === 429,
           message: String(err?.message ?? err).slice(0, 300),
           at: new Date().toISOString(),
         });
@@ -242,8 +247,11 @@ export const useChat = () => {
     ]);
   };
 
-  const handleParsedSlot = async (slot: SlotJSON) => {
-    logAiResponse(slot);
+  const handleParsedSlot = async (
+    slot: SlotJSON,
+    meta: Record<string, unknown> = {}
+  ) => {
+    logAiResponse({ ...slot, ...meta });
 
     if (slot.off_topic) {
       pushAssistant({
@@ -419,6 +427,95 @@ export const useChat = () => {
     });
   };
 
+  /**
+   * "pick the best for me" — recommend from the results already on screen.
+   * No model call and no re-search: re-running the same query was what made
+   * this follow-up feel broken during testing.
+   */
+  const pickBestForMe = () => {
+    const source = currentResultMessage();
+    if (!source?.flights?.length) {
+      pushAssistant({
+        text: "I don't have a search on screen yet, so there's nothing to pick. Tell me where you'd like to fly and when first.",
+      });
+      logAiResponse({ pick_best: true, pool_size: 0, at: new Date().toISOString() });
+      return;
+    }
+
+    const intent = source.intent ?? {};
+    const dest =
+      intent.dest_city ||
+      (source.slot?.destination ? String(source.slot.destination) : '') ||
+      '';
+
+    if (intent.direction === 'both' || source.slot?.round_trip) {
+      const pair = cheapestPair(splitLegs(source.flights));
+      if (pair) {
+        const text =
+          `I'd take this return${dest ? ` to ${dest}` : ''}: ` +
+          `${pair.outbound.airline_name} ${pair.outbound.flight_number} out on ` +
+          `${formatFlightDate(pair.outbound.date)} at ${pair.outbound.departure_time} ` +
+          `(£${pair.outbound.price_gbp.toFixed(2)}), coming back on ` +
+          `${formatFlightDate(pair.inbound.date)} with ${pair.inbound.airline_name} ` +
+          `${pair.inbound.flight_number} at ${pair.inbound.departure_time} ` +
+          `(£${pair.inbound.price_gbp.toFixed(2)}) — **£${pair.total.toFixed(2)}** total.`;
+        logAiResponse({
+          pick_best: true,
+          kind: 'round_trip',
+          total: pair.total,
+          at: new Date().toISOString(),
+        });
+        pushAssistant({
+          text,
+          intent,
+          slot: source.slot,
+          flights: [pair.outbound, pair.inbound],
+        });
+        return;
+      }
+    }
+
+    if (source.slot?.compare) {
+      const insight = buildComparisonSentence(source.flights, dest);
+      if (insight) {
+        logAiResponse({ pick_best: true, kind: 'compare', at: new Date().toISOString() });
+        pushAssistant({
+          text: insight,
+          intent,
+          slot: source.slot,
+          flights: source.flights.filter((f) => f.direction !== 'return'),
+          preface: insight,
+        });
+        return;
+      }
+    }
+
+    const pool = source.flights.filter((f) => f.direction !== 'return');
+    const best = cheapestBy(pool.length ? pool : source.flights);
+    if (!best) {
+      pushAssistant({ text: "I couldn't pick a favourite from what's on screen — try refining the search." });
+      return;
+    }
+    const text =
+      `I'd take **${best.airline_name} ${best.flight_number}**` +
+      `${dest ? ` to ${dest}` : ''}` +
+      ` on ${formatFlightDate(best.date)} — departs ${best.departure_time}, ` +
+      `${best.stops === 0 ? 'direct' : `${best.stops}-stop`}, ` +
+      `£${best.price_gbp.toFixed(2)}. It's the cheapest option in the current results.`;
+    logAiResponse({
+      pick_best: true,
+      kind: 'one_way',
+      flight_id: best.flight_id,
+      at: new Date().toISOString(),
+    });
+    pushAssistant({
+      text,
+      intent,
+      slot: source.slot,
+      flights: [best],
+    });
+  };
+
   const currentPool = (): Flight[] =>
     [...messages].reverse().find((m) => m.role === 'assistant' && m.flights?.length)?.flights ?? [];
 
@@ -528,12 +625,34 @@ export const useChat = () => {
       return;
     }
 
+    if (isPickBestQuery(text)) {
+      pickBestForMe();
+      return;
+    }
+
     setLoadingPhase('thinking');
     setIsLoading(true);
 
     // The model classified this as a question ABOUT the flights on screen
     const previousSlot =
       [...messages].reverse().find((m) => m.role === 'assistant' && m.slot)?.slot ?? null;
+
+    // Scripted study tasks (and close variants) resolve locally — no Groq call.
+    // This is the main quota shield during participant testing: each cold call
+    // otherwise burns thousands of tokens against the shared daily ceiling.
+    const studySlot = matchStudyTaskSlot(text);
+    if (studySlot) {
+      try {
+        await handleParsedSlot(resolveTurnSlot(previousSlot, studySlot, text), {
+          study_task_golden: true,
+          skipped_groq: true,
+        });
+      } finally {
+        setIsLoading(false);
+        setLoadingPhase('thinking');
+      }
+      return;
+    }
 
     try {
       let rawContent = await callGroqWithBackoff(text);
@@ -580,7 +699,7 @@ export const useChat = () => {
           id: `sys-${Date.now()}`,
           role: 'system',
           text: message,
-          retryable: isRetryableStatus(err?.status),
+          retryable: isRetryableError(err),
           timestamp: Date.now(),
         },
       ]);

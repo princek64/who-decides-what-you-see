@@ -10,6 +10,7 @@ import {
   departureAfterFromText,
   flexibleWindowFromText,
   isDirectOnlyQuery,
+  isPickBestQuery,
   maxPriceFromText,
   resolveTurnSlot,
   slotToIntent,
@@ -197,6 +198,58 @@ console.log('\n### refinements still carry (must not break mid-test)');
   check('refinement keeps date', refined.date_from === '2026-11-15');
   check('refinement drops direct_only', refined.direct_only == null);
 }
+
+console.log('\n### open explore keeps budget, drops city/time');
+{
+  const ams = blank({
+    destination: 'Amsterdam',
+    date_from: '2026-11-21',
+    date_to: '2026-11-21',
+    max_price: 80,
+    departure_after: '18:00',
+    sort: 'cheapest',
+  });
+  const weekendBudget = resolveTurnSlot(
+    ams,
+    applyWordingBackstops(blank({}), 'find me options to fly on a weekend for 150 pounds'),
+    'find me options to fly on a weekend for 150 pounds'
+  );
+  check('weekend budget is anywhere', weekendBudget.anywhere === true);
+  check('weekend budget cleared city', weekendBudget.destination == null);
+  check('weekend budget max_price 150', weekendBudget.max_price === 150);
+  check('weekend budget weekend flag', weekendBudget.weekend === true);
+  check('weekend budget cleared after 6pm', weekendBudget.departure_after == null);
+
+  const anywhere = resolveTurnSlot(
+    weekendBudget,
+    applyWordingBackstops(blank({ anywhere: true }), 'pick from anywhere in europe'),
+    'pick from anywhere in europe'
+  );
+  check('anywhere kept £150', anywhere.max_price === 150, String(anywhere.max_price));
+  check('anywhere kept weekend', anywhere.weekend === true);
+  check('anywhere no city', anywhere.destination == null);
+}
+
+console.log('\n### one-way after anywhere does not force round trip');
+{
+  const explore = blank({ anywhere: true, max_price: 150, weekend: true, sort: 'cheapest' });
+  const rome = resolveTurnSlot(
+    explore,
+    applyWordingBackstops(
+      blank({ destination: 'Rome', date_from: '2026-11-15', date_to: '2026-11-15' }),
+      "You're flying to Rome on November 15, 2026. Compare a one-way direct flight with a one-way flight with one stop."
+    ),
+    "You're flying to Rome on November 15, 2026. Compare a one-way direct flight with a one-way flight with one stop."
+  );
+  check('rome one-way not round_trip', rome.round_trip !== true, String(rome.round_trip));
+  check('rome compare set', rome.compare === true);
+  check('rome intent outbound', slotToIntent(rome).direction === 'outbound');
+}
+
+console.log('\n### pick-best detector');
+check('pick the best for me', isPickBestQuery('pick the best for me'));
+check('recommend one', isPickBestQuery('recommend one'));
+check('not ordinary search', !isPickBestQuery('cheapest flight to Paris'));
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures === 0 ? 0 : 1);

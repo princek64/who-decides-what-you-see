@@ -10,6 +10,8 @@
 import {
   MAX_API_RETRIES,
   friendlyApiError,
+  isDailyTokenQuotaError,
+  isRetryableError,
   isRetryableStatus,
   retryAfterSeconds,
   retryDelayMs,
@@ -39,7 +41,7 @@ const runWithBackoff = async (call: () => Promise<string>): Promise<string> => {
     try {
       return await call();
     } catch (err: any) {
-      const retryable = isRetryableStatus(err?.status);
+      const retryable = isRetryableError(err);
       logged.push({
         api_error: true,
         status: err?.status ?? null,
@@ -60,16 +62,17 @@ const runWithBackoff = async (call: () => Promise<string>): Promise<string> => {
     [apiError(429, 'Rate limit reached... Please try again in 6.7s.'), 6.7],
     [apiError(429, 'Please try again in 900ms'), 0.9],
     [apiError(429, 'rate limited', { 'retry-after': '12' }), 12],
+    [apiError(429, 'Please try again in 24m12.54s.'), 24 * 60 + 12.54],
     [apiError(500, 'internal error'), null],
   ];
   for (const [err, want] of cases) {
     const got = retryAfterSeconds(err);
-    if (got !== want) p.push(`${err.message.slice(0, 28)} -> ${got} (want ${want})`);
+    if (got !== want) p.push(`${err.message.slice(0, 40)} -> ${got} (want ${want})`);
   }
   // Header wins over the message text
   if (retryAfterSeconds(apiError(429, 'try again in 3s', { 'retry-after': '9' })) !== 9)
     p.push('header did not take precedence over the message text');
-  check('retry-after parsing', p, 'seconds, milliseconds and Retry-After header');
+  check('retry-after parsing', p, 'seconds, milliseconds, compound m/s, Retry-After header');
 }
 
 // ── which statuses are retried ────────────────────────────────────────────
@@ -79,6 +82,35 @@ const runWithBackoff = async (call: () => Promise<string>): Promise<string> => {
   for (const s of [400, 401, 404, 422]) if (isRetryableStatus(s)) p.push(`${s} retried (it should not be)`);
   if (isRetryableStatus(undefined)) p.push('undefined status retried');
   check('retryable statuses', p, '429/408/5xx yes, 4xx no');
+}
+
+// ── TPD 429 must not be retried ───────────────────────────────────────────
+{
+  logged.length = 0;
+  waits.length = 0;
+  let calls = 0;
+  let thrown: any = null;
+  const tpd =
+    'Rate limit reached for model openai/gpt-oss-20b on tokens per day (TPD): Limit 200000, Used 199429, Requested 3981. Please try again in 24m12.54s.';
+  try {
+    await runWithBackoff(async () => {
+      calls++;
+      throw apiError(429, tpd);
+    });
+  } catch (err) {
+    thrown = err;
+  }
+  const p: string[] = [];
+  if (!isDailyTokenQuotaError(apiError(429, tpd))) p.push('TPD not detected');
+  if (isRetryableError(apiError(429, tpd))) p.push('TPD marked retryable');
+  if (calls !== 1) p.push(`${calls} calls (want 1 — daily quota never clears on retry)`);
+  if (waits.length !== 0) p.push(`waited anyway: ${waits.join(',')}`);
+  if (!thrown) p.push('error was swallowed');
+  const msg = friendlyApiError(thrown);
+  if (/requests a minute/i.test(msg)) p.push('TPD message wrongly says per-minute');
+  if (!/today'?s AI usage limit/i.test(msg)) p.push('TPD message missing daily-limit wording');
+  if (!/still on screen/i.test(msg)) p.push('message does not tell the participant their results are intact');
+  check('TPD 429 not retried', p, msg.slice(0, 72));
 }
 
 // ── a 429 that clears on the second attempt ───────────────────────────────
@@ -159,3 +191,4 @@ const runWithBackoff = async (call: () => Promise<string>): Promise<string> => {
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
+if (fail > 0) process.exit(1);

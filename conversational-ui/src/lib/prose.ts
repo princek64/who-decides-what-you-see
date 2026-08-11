@@ -97,8 +97,14 @@ export const describeConstraints = (intent: IntentJSON): string => {
   const destination = intent.dest_city || intent.dest_code;
   const destInfo = destination ? ` to ${destination}` : '';
   const priceInfo = intent.max_price ? ` under £${intent.max_price}` : '';
-  const timeInfo = describeTimeWindow(intent.departure_after, intent.departure_before);
-  const weekendInfo = intent.weekend_only ? ' departing at the weekend' : '';
+  const timeBit = describeTimeWindow(intent.departure_after, intent.departure_before)
+    .replace(/^\s*departing\s+/, '')
+    .trim();
+  const weekendBit = intent.weekend_only ? 'at the weekend' : '';
+  let departInfo = '';
+  if (timeBit && weekendBit) departInfo = ` departing ${timeBit} ${weekendBit}`;
+  else if (timeBit) departInfo = ` departing ${timeBit}`;
+  else if (weekendBit) departInfo = ` departing ${weekendBit}`;
   let dateInfo = '';
   if (intent.date) {
     dateInfo = ` on ${formatFlightDate(intent.date)}`;
@@ -113,7 +119,7 @@ export const describeConstraints = (intent: IntentJSON): string => {
       dateInfo = ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
     }
   }
-  return `${destInfo}${priceInfo}${timeInfo}${weekendInfo}${dateInfo}`;
+  return `${destInfo}${priceInfo}${departInfo}${dateInfo}`;
 };
 
 const clockLabel = (hhmm: string): string => {
