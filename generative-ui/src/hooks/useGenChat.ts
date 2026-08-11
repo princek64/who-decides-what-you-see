@@ -10,7 +10,7 @@ import { useSessionLogger } from './useSessionLogger';
 import {
   MAX_API_RETRIES,
   friendlyApiError,
-  isRetryableStatus,
+  isRetryableError,
   retryDelayMs,
   sleep,
 } from '../lib/apiRetry';
@@ -241,7 +241,7 @@ export const useGenChat = () => {
         return await callGroq(userMessage, history, isRetry);
       } catch (err: any) {
         const status: number | undefined = err?.status;
-        const retryable = isRetryableStatus(status);
+        const retryable = isRetryableError(err);
         // Every failed attempt is logged through the EXISTING ai_response event
         // (status code + ISO timestamp), so a session log shows exactly where
         // the rate limit interrupted the participant.
@@ -250,6 +250,7 @@ export const useGenChat = () => {
           status: status ?? null,
           attempt: attempt + 1,
           retryable,
+          daily_quota: !retryable && status === 429,
           message: String(err?.message ?? err).slice(0, 300),
           at: new Date().toISOString(),
         });
@@ -590,7 +591,7 @@ export const useGenChat = () => {
             id: `sys-${Date.now()}`,
             role: 'system',
             text: message,
-            retryable: isRetryableStatus(err?.status),
+            retryable: isRetryableError(err),
             timestamp: Date.now(),
           },
         ]);
