@@ -1,6 +1,6 @@
 import type { IntentJSON } from '../hooks/useFlightFilter';
 import { AIRPORT_TO_CITY, DESTINATION_CITIES } from './airportMap';
-import { DATA_MIN, DATA_MAX } from '../constants/prompts';
+import { DATA_MIN, DATA_MAX, getSearchAnchor } from '../constants/prompts';
 
 // The strict JSON contract the LLM must return. The first seven keys are the
 // always-present slot-filling contract; the rest are optional constraints kept
@@ -136,12 +136,18 @@ export const isCheapestWhenQuery = (text: string): boolean =>
   /\bbest (?:time|day|weekend|date)\b.*\b(?:to (?:go|fly|travel)|for)\b/i.test(text) ||
   /\bwhen(?:'s| is)?\b.*\bcheapest\b/i.test(text);
 
-// "Show me only direct flights"
+// "Show me only direct flights" / bare "direct flight(s)" / "nonstop".
+// Compare wordings also contain "direct flight" — callers that SET direct_only
+// from this must also check isCompareQuery and leave the preference open.
 export const isDirectOnlyQuery = (text: string): boolean =>
   /\b(?:only|just)\s+(?:show\s+|see\s+|give\s+me\s+)?(?:me\s+)?(?:the\s+)?direct\b/i.test(text) ||
   /\bdirect\s+(?:flights?\s+)?only\b/i.test(text) ||
   /\bnarrow(?:\s+it)?\s+to\s+direct\b/i.test(text) ||
-  /\bnon[- ]?stop\s+only\b/i.test(text);
+  /\bnon[- ]?stop\s+only\b/i.test(text) ||
+  /\bdirect(?:\s+one[- ]way)?\s+flights?\b/i.test(text) ||
+  /\bone[- ]way\s+direct\s+flights?\b/i.test(text) ||
+  /\bfly\s+direct\b/i.test(text) ||
+  /\bnon[- ]?stops?\b/i.test(text);
 
 // "include flights with a stop" / "allow a stop"
 export const isDropDirectQuery = (text: string): boolean =>
@@ -330,6 +336,79 @@ export const dateFromText = (text: string): string | null => {
   return null;
 };
 
+/** "under £80" / "under 80" / "below 80 pounds" / "max £150" / "for under 25". */
+export const maxPriceFromText = (text: string): number | null => {
+  const m =
+    /\b(?:under|below|less\s+than|up\s+to|max(?:imum)?)\s*£?\s*(\d+(?:\.\d+)?)\s*(?:pounds?|gbp|quid)?\b/i.exec(
+      text
+    ) ||
+    /£\s*(\d+(?:\.\d+)?)/i.exec(text) ||
+    /\b(\d+(?:\.\d+)?)\s*(?:pounds?|gbp|quid)\b/i.exec(text);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * "after 6pm" / "after 18:00" / "leaves after 6" → "18:00".
+ * Bare "evening" (no explicit clock time) → "18:00".
+ * "from 6pm" requires am/pm so "from 10 September" is never read as a time.
+ */
+export const departureAfterFromText = (text: string): string | null => {
+  const clock =
+    /\b(?:after|leaves?\s+after)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i.exec(text) ||
+    /\bfrom\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(text);
+  if (clock) {
+    let hours = Number(clock[1]);
+    const mins = clock[2] ? Number(clock[2]) : 0;
+    const meridiem = (clock[3] || '').toLowerCase();
+    if (meridiem === 'pm' && hours < 12) hours += 12;
+    if (meridiem === 'am' && hours === 12) hours = 0;
+    // Bare "after 6" in a flight departure context means evening, not 06:00.
+    if (!meridiem && !clock[2] && hours >= 1 && hours <= 11) hours += 12;
+    if (hours >= 0 && hours <= 23 && mins >= 0 && mins <= 59) {
+      return `${pad(hours)}:${pad(mins)}`;
+    }
+  }
+  if (/\bevening\b/i.test(text)) return '18:00';
+  return null;
+};
+
+/**
+ * "in the next three months" / "over the next 3 months" → [anchor, anchor+3m]
+ * clamped to the dataset window. Null when the wording is not a flexible
+ * multi-month window (so a concrete day like "16 October" is left alone).
+ */
+export const flexibleWindowFromText = (
+  text: string
+): { date_from: string; date_to: string } | null => {
+  const monthsMatch =
+    /\b(?:in|over|for|during)\s+the\s+next\s+(?:three|3)\s+months?\b/i.exec(text) ||
+    /\bnext\s+(?:three|3)\s+months?\b/i.exec(text);
+  if (!monthsMatch) return null;
+  const from = getSearchAnchor();
+  const end = new Date(`${from}T00:00:00`);
+  end.setMonth(end.getMonth() + 3);
+  let to = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
+  if (to > DATA_MAX) to = DATA_MAX;
+  if (from > to) return null;
+  return { date_from: from, date_to: to };
+};
+
+/** True when the model’s date span is clearly narrower than a stated multi-month window. */
+const windowLooksCollapsed = (slot: SlotJSON, window: { date_from: string; date_to: string }): boolean => {
+  const from = typeof slot.date_from === 'string' ? slot.date_from.trim() : '';
+  const to = typeof slot.date_to === 'string' ? slot.date_to.trim() : '';
+  if (!from || !to) return true;
+  const span =
+    (new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / 86400000;
+  const want =
+    (new Date(`${window.date_to}T00:00:00`).getTime() -
+      new Date(`${window.date_from}T00:00:00`).getTime()) /
+    86400000;
+  return span < Math.min(60, want * 0.5);
+};
+
 /**
  * A message that refines the results already on screen rather than starting a
  * new search: "show me the other flight", "show me the other option", "what
@@ -360,6 +439,10 @@ export const isRefinementQuery = (text: string): boolean =>
 export const isPureRefinement = (text: string): boolean =>
   isRefinementQuery(text) && !destinationFromText(text) && !dateFromText(text);
 
+// Referenced by applyWordingBackstops so "for sevilla for same date?" still
+// defers date recovery to resolveTurnSlot carry-forward.
+const SAME_DATE_CUE = /\bsame (?:date|day|dates|time)\b/i;
+
 export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON => {
   if (isPriceOnlyQuery(text)) {
     slot.date_from = null;
@@ -377,7 +460,14 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
   if (slot.anywhere && !isAnywhereQuery(text)) {
     slot.anywhere = false;
   }
-  if (isCompareQuery(text)) slot.compare = true;
+  if (isCompareQuery(text)) {
+    slot.compare = true;
+    // "compare a direct flight with one that has a stop" contains the word
+    // "direct", so a widened direct-only detector would otherwise collapse the
+    // comparison to directs only. The prompt already says comparisons leave
+    // direct_only null — enforce that here when the model gets it wrong.
+    slot.direct_only = null;
+  }
   if (isCheapestWhenQuery(text)) slot.cheapest_when = true;
   if (/\bweekend\b/i.test(text)) slot.weekend = true;
 
@@ -386,6 +476,23 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
   }
   if (!slot.low_co2 && isLowCo2Query(text)) slot.low_co2 = true;
   if (!slot.round_trip && isRoundTripQuery(text)) slot.round_trip = true;
+
+  // Prefer facts the user typed over whatever the model invented or dropped.
+  // Destination: if the message names a city, that city wins — this is what
+  // stops Task 2/3 in the same thread from keeping Task 1's city when the
+  // model echoes the previous destination or leaves destination null.
+  const namedDestination = destinationFromText(text);
+  if (namedDestination && !isPureRefinement(text) && !isPriceOnlyQuery(text)) {
+    slot.destination = namedDestination;
+    slot.anywhere = false;
+  }
+
+  const statedPrice = maxPriceFromText(text);
+  if (statedPrice != null) slot.max_price = statedPrice;
+
+  const statedAfter = departureAfterFromText(text);
+  if (statedAfter) slot.departure_after = statedAfter;
+
   if (isReturnOnlyQuery(text)) {
     slot.return_only = true;
     // gpt-oss-20b classifies several return-leg phrasings as off_topic — even
@@ -415,29 +522,28 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
     }
   }
 
-  // General date backstop. The return-leg branch above only runs on return-leg
-  // wording, so a date the model dropped on any OTHER phrasing was never
-  // recovered — and the app would ask "Which dates?" for a date the user had
-  // plainly written. Stacking constraints into one sentence ("... on November
-  // 21st after 6pm under £80") is where that was reported. Runs last so it can
-  // only ever fill a blank: anything the model extracted, and anything the
-  // branches above recovered, is left alone.
+  // Date backstops. Flexible multi-month windows first (so "next three months"
+  // is not collapsed to a single concrete day if one also appears), then a
+  // concrete day. USER TEXT WINS over the model: few-shot echoes like
+  // 2026-07-14 used to override a typed October date and return zero flights
+  // because the backstop only filled blanks.
   //
   // Deliberately skipped on the two turn shapes where empty dates are the
   // correct answer rather than a miss: a detail question about a flight already
   // on screen (which must stay an empty search), and a bare price correction
   // (whose dates are cleared just above so carry-forward can supply them).
   const isDetailTurn = Boolean(String(slot.detail_field ?? '').trim());
-  if (
-    !hasValue(slot.date_from) &&
-    !hasValue(slot.date_to) &&
-    !isDetailTurn &&
-    !isPriceOnlyQuery(text)
-  ) {
-    const date = dateFromText(text);
-    if (date) {
-      slot.date_from = date;
-      slot.date_to = date;
+  if (!isDetailTurn && !isPriceOnlyQuery(text) && !SAME_DATE_CUE.test(text)) {
+    const window = flexibleWindowFromText(text);
+    if (window && windowLooksCollapsed(slot, window)) {
+      slot.date_from = window.date_from;
+      slot.date_to = window.date_to;
+    } else {
+      const date = dateFromText(text);
+      if (date) {
+        slot.date_from = date;
+        slot.date_to = date;
+      }
     }
   }
   return slot;
@@ -470,8 +576,6 @@ const MODIFIER_CUE =
 // Explicit "throw away the current search" phrases.
 const RESET_CUE = /\b(?:start over|start again|new search|forget (?:that|it|the)|reset|never ?mind)\b/i;
 
-const SAME_DATE_CUE = /\bsame (?:date|day|dates|time)\b/i;
-
 const hasValue = (v: unknown): boolean =>
   v !== null && v !== undefined && !(typeof v === 'string' && !v.trim());
 
@@ -501,8 +605,16 @@ export const resolveTurnSlot = (
 
   const prevDest = hasValue(prev.destination) ? String(prev.destination).trim().toLowerCase() : null;
   const nextDest = hasValue(next.destination) ? String(next.destination).trim().toLowerCase() : null;
+  const textDestRaw = destinationFromText(text);
+  const textDest = textDestRaw ? textDestRaw.trim().toLowerCase() : null;
   const sameDestination = prevDest !== null && nextDest !== null && prevDest === nextDest;
-  const destinationIntroduced = hasDestination && !sameDestination;
+  // Prefer the city the user typed when deciding "is this a new search?".
+  // Without this, a model that echoes the previous city (or leaves destination
+  // null before backstops) keeps showing Barcelona while the user asked for
+  // Amsterdam on the next task in the same thread.
+  const destinationIntroduced =
+    (hasDestination && !sameDestination) ||
+    (textDest !== null && prevDest !== null && textDest !== prevDest);
 
   // A destination picked from a prior budget/anywhere search (no destination
   // named yet) defaults to round trip: the user is choosing somewhere to
@@ -510,22 +622,47 @@ export const resolveTurnSlot = (
   const fromExploration = Boolean(prev.anywhere) && !hasValue(prev.destination);
 
   if ((destinationIntroduced && !isModifier) || (hasDestination && hasDates && !isModifier)) {
-    return fromExploration ? { ...next, round_trip: true } : next;
+    const fresh = fromExploration ? { ...next, round_trip: true } : { ...next };
+    if (textDestRaw) fresh.destination = textDestRaw;
+    // A brand-new city search must not keep prior-task filters the current
+    // message did not restate.
+    if (destinationIntroduced && !isModifier) {
+      if (!maxPriceFromText(text)) fresh.max_price = null;
+      if (!departureAfterFromText(text)) {
+        fresh.departure_after = null;
+        fresh.departure_before = null;
+      }
+      if (!isCompareQuery(text)) fresh.compare = false;
+      if (!isCheapestWhenQuery(text)) fresh.cheapest_when = false;
+      if (!/\bweekend\b/i.test(text)) fresh.weekend = false;
+      if (!isRoundTripQuery(text) && !fromExploration) fresh.round_trip = false;
+      if (!isReturnOnlyQuery(text)) fresh.return_only = false;
+      if (isCompareQuery(text) || !isDirectOnlyQuery(text)) fresh.direct_only = null;
+    }
+    return fresh;
   }
 
   const merged: SlotJSON = { ...next, anywhere: false };
   const dropsDirect = isDropDirectQuery(text);
   for (const key of CARRYABLE_SLOTS) {
     if (key === 'direct_only' && dropsDirect) continue;
+    // Comparison / cheapest-when are turn intents, not standing filters. Carrying
+    // them into "10th August instead" kept the previous comparison framing on a
+    // plain date change.
+    if (key === 'compare' && !isCompareQuery(text)) continue;
+    if (key === 'cheapest_when' && !isCheapestWhenQuery(text)) continue;
     if (!hasValue(merged[key]) && hasValue(prev[key])) {
       (merged[key] as unknown) = prev[key];
     }
   }
   if (dropsDirect && next.direct_only == null) merged.direct_only = null;
+  if (!isCompareQuery(text)) merged.compare = false;
+  if (!isCheapestWhenQuery(text)) merged.cheapest_when = false;
   if (SAME_DATE_CUE.test(text) && (hasValue(prev.date_from) || hasValue(prev.date_to))) {
     merged.date_from = prev.date_from;
     merged.date_to = prev.date_to;
   }
+  if (textDestRaw && destinationIntroduced) merged.destination = textDestRaw;
   merged.missing = [
     ...(hasValue(merged.destination) ? [] : ['destination']),
     ...(hasValue(merged.date_from) || hasValue(merged.date_to) ? [] : ['dates']),
