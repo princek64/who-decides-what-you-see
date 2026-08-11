@@ -112,25 +112,25 @@ const sortedByPrice = (r: Flight[]) =>
 
 const cases: Case[] = [
   // ---- Task 1: simple lookup (has destination + date -> searches) ----
-  { id: 'T1a', query: 'Find me the cheapest direct flight to Barcelona on 14 July', check: (_s, i, r, b) => {
+  { id: 'T1a', query: 'Find me the cheapest direct flight to Barcelona on 16 October', check: (_s, i, r, b) => {
     const p: string[] = [];
     if (b !== 'results') { p.push(`branch=${b} (want results)`); return p; }
     if (i!.stops !== 0) p.push(`stops=${i!.stops} (want 0)`);
-    if (i!.date_from !== '2026-07-14' || i!.date_to !== '2026-07-14') p.push(`dates=${i!.date_from}..${i!.date_to}`);
+    if (i!.date_from !== '2026-10-16' || i!.date_to !== '2026-10-16') p.push(`dates=${i!.date_from}..${i!.date_to}`);
     if (!r.length) p.push('no results');
     if (r.length && r.some(f => f.stops !== 0)) p.push('non-direct in results');
     if (r.length && !sortedByPrice(r)) p.push('not price-sorted');
-    if (r.length && Math.abs(r[0].price_gbp - 35.04) > 50) p.push(`cheapest=£${r[0].price_gbp} (expected ~£35)`);
+    if (r.length && Math.abs(r[0].price_gbp - 22.49) > 50) p.push(`cheapest=£${r[0].price_gbp} (expected ~£22)`);
     return p;
   }},
-  { id: 'T1b', query: 'cheapest nonstop to Barcelona on 2026-07-14', check: (_s, i, r, b) => {
+  { id: 'T1b', query: 'cheapest nonstop to Barcelona on 2026-10-16', check: (_s, i, r, b) => {
     const p: string[] = [];
     if (b !== 'results') { p.push(`branch=${b} (want results)`); return p; }
     if (i!.stops !== 0) p.push(`stops=${i!.stops}`);
     if (!r.length) p.push('no results');
     return p;
   }},
-  { id: 'T1c', query: 'I want to fly direct to Barcelona on July 14th, what is the cheapest option?', check: (s, _i, r, b) => {
+  { id: 'T1c', query: 'I want to fly direct to Barcelona on October 16th, what is the cheapest option?', check: (s, _i, r, b) => {
     const p: string[] = [];
     if (b !== 'results') { p.push(`branch=${b} (want results)`); return p; }
     if (s.max_price != null) p.push(`invented max_price=${s.max_price}`);
@@ -148,17 +148,18 @@ const cases: Case[] = [
     if (String(s.destination || '').toLowerCase() !== 'amsterdam') p.push(`destination=${s.destination}`);
     return p;
   }},
-  { id: 'T2b', query: 'evening flight to amsterdam on 20 August, max 80 pounds', check: (_s, i, r, b) => {
+  { id: 'T2b', query: 'evening flight to amsterdam on 21 November, max 80 pounds', check: (_s, i, r, b) => {
     const p: string[] = [];
     if (b !== 'results') { p.push(`branch=${b} (want results)`); return p; }
     if (i!.max_price !== 80) p.push(`max_price=${i!.max_price}`);
+    if (i!.departure_after !== '18:00') p.push(`departure_after=${i!.departure_after}`);
     if (r.some(f => f.price_gbp > 80)) p.push('result over £80');
     if (!r.length) p.push('no results');
     return p;
   }},
 
   // ---- Task 3: comparison (has date -> searches, both stop types) ----
-  { id: 'T3a', query: 'Compare a direct flight to Rome with one that has a stop, on 10 July', check: (_s, i, r, b) => {
+  { id: 'T3a', query: 'Compare a direct flight to Rome with one that has a stop, on 15 November', check: (_s, i, r, b) => {
     const p: string[] = [];
     if (b !== 'results') { p.push(`branch=${b} (want results)`); return p; }
     if (i!.stops != null) p.push(`stops=${i!.stops} (should be omitted for comparison)`);
@@ -166,7 +167,7 @@ const cases: Case[] = [
     if (!r.some(f => f.stops === 1)) p.push('no 1-stop options returned');
     return p;
   }},
-  { id: 'T3b', query: 'direct vs connecting flights to Rome on 2026-07-10', check: (_s, _i, r, b) => {
+  { id: 'T3b', query: 'direct vs connecting flights to Rome on 2026-11-15', check: (_s, _i, r, b) => {
     const p: string[] = [];
     if (b !== 'results') { p.push(`branch=${b} (want results)`); return p; }
     if (!r.some(f => f.stops === 0) || !r.some(f => f.stops === 1)) p.push('missing one side of comparison');
@@ -249,16 +250,16 @@ const cases: Case[] = [
   { id: 'E3-off-topic', query: 'what is the weather like in Paris today?', check: (_s, _i, _r, b) =>
     b === 'off-topic' ? [] : [`branch=${b} (want off-topic)`] },
   { id: 'E4-outside-window', query: 'flights to Rome in March 2026', check: (_s, _i, r, b) => {
-    // Data starts July 2026 — acceptable: zero results or a clamped range
+    // Data starts August 2026 — acceptable: zero results or a clamped range
     if (b === 'results' && r.length === 0) return [];
-    if (b === 'results' && r.length > 0 && r.every(f => f.date >= '2026-07-01')) return [];
+    if (b === 'results' && r.length > 0 && r.every(f => f.date >= '2026-08-05')) return [];
     return [`branch=${b}, results=${r.length}`];
   }},
-  { id: 'E5-foreign-origin', query: 'flights from Manchester to Paris on 10 July', check: (_s, _i, _r, b) =>
+  { id: 'E5-foreign-origin', query: 'flights from Manchester to Paris on 10 September', check: (_s, _i, _r, b) =>
     b === 'foreign-origin' ? [] : [`branch=${b} (want foreign-origin)`] },
   { id: 'E6-dest-no-date', query: 'flights to Barcelona', check: (_s, _i, _r, b) =>
     b === 'ask-dates' ? [] : [`branch=${b} (want ask-dates)`] },
-  { id: 'E7-london-airport', query: 'flights from Gatwick to Rome on 10 July', check: (_s, i, r, b) => {
+  { id: 'E7-london-airport', query: 'flights from Gatwick to Rome on 15 November', check: (_s, i, r, b) => {
     const p: string[] = [];
     if (b !== 'results') { p.push(`branch=${b} (want results)`); return p; }
     if (i!.origin_code !== 'LGW') p.push(`origin_code=${i!.origin_code} (want LGW)`);
@@ -377,15 +378,15 @@ const replaySequence = async (
 // final turn names a destination AND a date and carries no modifier cue, so it
 // is a NEW query and must inherit nothing.
 const OVERCARRY_SEQUENCE = [
-  "What's the cheapest direct flight from London to Barcelona on 15 August?",
+  "What's the cheapest direct flight from London to Barcelona on 16 October?",
   'I need a flight to Amsterdam departing after 6pm, under £80',
-  '31 July', // answers the app's "Which dates?"
-  'Compare a direct flight with one that has a stop to Rome on 31 July - which would you choose?',
+  '21 November', // answers the app's "Which dates?"
+  'Compare a direct flight with one that has a stop to Rome on 15 November - which would you choose?',
 ];
 
-// Ground truth for the final turn (Rome/FCO outbound 2026-07-31, Economy).
+// Ground truth for the final turn (Rome/FCO outbound 2026-11-15, Economy).
 const romeTruth = flights
-  .filter((f) => f.dest_code === 'FCO' && f.date === '2026-07-31' && f.direction === 'outbound' && f.cabin_class === 'Economy')
+  .filter((f) => f.dest_code === 'FCO' && f.date === '2026-11-15' && f.direction === 'outbound' && f.cabin_class === 'Economy')
   .sort((a, b) => a.price_gbp - b.price_gbp);
 
 const runOverCarry = async (): Promise<string[]> => {
@@ -399,8 +400,12 @@ const runOverCarry = async (): Promise<string[]> => {
   if (!results.some((f) => f.stops === 0)) p.push('no direct side for the comparison');
   if (!results.some((f) => f.stops >= 1)) p.push('no connecting side for the comparison');
   const cheapest = results[0];
-  if (!cheapest || cheapest.price_gbp !== 35.81 || cheapest.stops !== 1) {
-    p.push(`cheapest=${cheapest ? `£${cheapest.price_gbp}/stops=${cheapest.stops}` : 'none'} (want £35.81 connecting)`);
+  const want = romeTruth[0];
+  if (!cheapest || !want || Math.abs(cheapest.price_gbp - want.price_gbp) > 0.01 || cheapest.stops !== want.stops) {
+    p.push(
+      `cheapest=${cheapest ? `£${cheapest.price_gbp}/stops=${cheapest.stops}` : 'none'} ` +
+        `(want £${want?.price_gbp}/stops=${want?.stops})`
+    );
   }
   return p;
 };
