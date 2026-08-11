@@ -9,6 +9,7 @@ import {
   isAddReturnLegQuery,
   destinationFromText,
   dateFromText,
+  isShowAllQuery,
   classifyOrigin,
   datesQuestionFor,
   firstMissingRequiredSlot,
@@ -47,6 +48,9 @@ export interface ChatMessage {
   retryable?: boolean;
   preface?: string;
   flights?: Flight[];
+  /** Rendered as the full result table rather than a summarised preview —
+   *  set by an explicit "show me all options" request. */
+  showAll?: boolean;
   timestamp: number;
 }
 
@@ -377,6 +381,44 @@ export const useChat = () => {
     Boolean(String(slot.destination ?? '').trim()) &&
     Boolean((slot.date_from ?? '').trim() || (slot.date_to ?? '').trim());
 
+  /** The newest screen that actually produced results — the search a "show me
+   *  all" request is asking to expand. */
+  const currentResultMessage = (): ChatMessage | undefined =>
+    [...messages].reverse().find((m) => m.role === 'assistant' && m.flights && m.flights.length > 0);
+
+  /**
+   * Lay the current result set out in full. No model call and no re-filtering:
+   * the message being expanded already holds the complete filtered set and the
+   * intent that produced it, so the search context carries forward exactly.
+   */
+  const showAllResults = () => {
+    const source = currentResultMessage();
+    if (!source?.flights?.length) {
+      // Nothing searched yet — "show me all options" has no set to expand.
+      pushAssistant({
+        text: "I don't have a search on screen yet, so there's nothing to list. What are you looking for? Tell me where you'd like to fly and when — for example \"direct flights to Barcelona on 16 October\".",
+      });
+      logAiResponse({ show_all: true, pool_size: 0, at: new Date().toISOString() });
+      return;
+    }
+
+    const intent = source.intent ?? {};
+    logAiResponse({
+      show_all: true,
+      pool_size: source.flights.length,
+      ...intent,
+      at: new Date().toISOString(),
+    });
+    const prose = buildProseAnswer(source.flights, intent, { showAll: true });
+    pushAssistant({
+      text: prose.text,
+      intent,
+      slot: source.slot,
+      flights: source.flights,
+      showAll: true,
+    });
+  };
+
   const currentPool = (): Flight[] =>
     [...messages].reverse().find((m) => m.role === 'assistant' && m.flights?.length)?.flights ?? [];
 
@@ -469,6 +511,20 @@ export const useChat = () => {
       !dateFromText(text) &&
       (await addReturnLeg())
     ) {
+      return;
+    }
+
+    // "show me all options" — a request to SEE the current results laid out,
+    // not a new search. Answered from the results already on screen rather than
+    // through the model: the set is complete (the assistant message carries the
+    // full filtered list, not the preview the prose renders), so a round trip
+    // could only re-derive what is already here, and asking the model risked
+    // returning yet another summary — which is exactly the failure reported,
+    // where a participant asked twice and got the same prose both times.
+    // Answering locally also means the established destination, dates and
+    // constraints cannot be disturbed: the previous intent is reused verbatim.
+    if (isShowAllQuery(text)) {
+      showAllResults();
       return;
     }
 
