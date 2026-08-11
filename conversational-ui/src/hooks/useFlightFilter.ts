@@ -166,6 +166,15 @@ export const filterAndSortFlights = (
     // Two distinct, close-together dates: pin outbound to the first date and
     // return to the second, reusing the exact-single-date path (`intent.date`
     // already takes priority over the date_from/date_to range below).
+    //
+    // Departure time windows ("after 2pm from London") apply to the OUTBOUND
+    // leg only. Spreading them onto the return search filtered Paris→London
+    // departures by a London-side clock constraint the user never stated.
+    const inboundIntent: IntentJSON = {
+      ...intent,
+      departure_after: undefined,
+      departure_before: undefined,
+    };
     if (isRoundTripItinerary(intent)) {
       const outbound = filterAndSortFlights(
         flights,
@@ -174,14 +183,18 @@ export const filterAndSortFlights = (
       );
       const inbound = filterAndSortFlights(
         flights,
-        { ...intent, direction: 'return', date: intent.date_to },
+        { ...inboundIntent, direction: 'return', date: intent.date_to },
         medianCo2
       );
       return sortFlights([...outbound, ...inbound], intent.sort_by);
     }
 
     const outbound = filterAndSortFlights(flights, { ...intent, direction: 'outbound' }, medianCo2);
-    const inbound = filterAndSortFlights(flights, { ...intent, direction: 'return' }, medianCo2);
+    const inbound = filterAndSortFlights(
+      flights,
+      { ...inboundIntent, direction: 'return' },
+      medianCo2
+    );
     return sortFlights([...outbound, ...inbound], intent.sort_by);
   }
 
