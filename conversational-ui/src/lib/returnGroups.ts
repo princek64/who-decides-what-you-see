@@ -60,18 +60,49 @@ export interface CheapestPair {
   total: number;
 }
 
+/** Nights away for an open-window pairing (Fri→Mon is 3). */
+export const MAX_OPEN_TRIP_SPAN_DAYS = 4;
+
+const daySpan = (from: string, to: string): number => {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.round(
+    (new Date(`${to}T00:00:00`).getTime() - new Date(`${from}T00:00:00`).getTime()) / msPerDay
+  );
+};
+
 /**
- * Cheapest outbound + cheapest return, priced together. Each leg is picked on
- * its own — the dataset has no fare rules tying one leg to another, so the
- * cheapest combination is just the two cheapest legs. Null unless BOTH legs
- * have at least one flight, since a total across one leg would misstate what
- * the trip costs.
+ * Cheapest coherent round trip: outbound then return within a few days.
+ *
+ * Independent "cheapest out + cheapest back" used to pair a Friday in August
+ * with a Friday in September — not a trip anyone can take. Prefer return 1–4
+ * days after outbound; if nothing fits, fall back to any return strictly after
+ * outbound. Null only when a leg is empty.
  */
 export const cheapestPair = (groups: LegGroups): CheapestPair | null => {
   if (groups.outbound.length === 0 || groups.inbound.length === 0) return null;
-  const cheapestOf = (list: Flight[]): Flight =>
-    list.reduce((best, f) => (f.price_gbp < best.price_gbp ? f : best), list[0]);
-  const outbound = cheapestOf(groups.outbound);
-  const inbound = cheapestOf(groups.inbound);
-  return { outbound, inbound, total: outbound.price_gbp + inbound.price_gbp };
+
+  const prefer = (spanMax: number | null): CheapestPair | null => {
+    let best: CheapestPair | null = null;
+    for (const outbound of groups.outbound) {
+      for (const inbound of groups.inbound) {
+        const span = daySpan(outbound.date, inbound.date);
+        if (span < 1) continue;
+        if (spanMax != null && span > spanMax) continue;
+        const total = outbound.price_gbp + inbound.price_gbp;
+        if (
+          !best ||
+          total < best.total ||
+          (total === best.total && outbound.date < best.outbound.date) ||
+          (total === best.total &&
+            outbound.date === best.outbound.date &&
+            outbound.flight_id < best.outbound.flight_id)
+        ) {
+          best = { outbound, inbound, total };
+        }
+      }
+    }
+    return best;
+  };
+
+  return prefer(MAX_OPEN_TRIP_SPAN_DAYS) ?? prefer(null);
 };
