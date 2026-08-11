@@ -122,6 +122,23 @@ export const isAnywhereQuery = (text: string): boolean =>
   /\b(?:surprise me|anywhere|somewhere)\b/i.test(text) ||
   /\bwhere (?:can|could|should) (?:i|we|you)\b/i.test(text);
 
+/** Explicit one-way — must clear round_trip even after an anywhere→city pick. */
+export const isOneWayQuery = (text: string): boolean =>
+  /\bone[- ]way\b/i.test(text) ||
+  /\boutbound\s+only\b/i.test(text) ||
+  /\bsingle\s+(?:flight|ticket|fare|leg)\b/i.test(text);
+
+/**
+ * "pick the best for me" / "recommend one" — answer from results already on
+ * screen rather than re-running the search through the model.
+ */
+export const isPickBestQuery = (text: string): boolean =>
+  /\bpick\s+(?:the\s+)?best\b/i.test(text) ||
+  /\bbest\s+(?:one|option|flight|for\s+me)\b/i.test(text) ||
+  /\b(?:you|just)\s+(?:choose|decide|pick)\b/i.test(text) ||
+  /\bchoose\s+(?:one|for\s+me)\b/i.test(text) ||
+  /\brecommend\b/i.test(text);
+
 // "Compare direct vs connecting, which would you choose?" — a request for a
 // synthesized direct-vs-stop recommendation, not just a filtered list.
 export const isCompareQuery = (text: string): boolean =>
@@ -350,6 +367,21 @@ export const maxPriceFromText = (text: string): number | null => {
 };
 
 /**
+ * Budget/weekend exploration that does not name a city — e.g. "options to fly
+ * on a weekend for 150 pounds". Treated like anywhere so a prior Amsterdam
+ * search is not kept when the user is clearly starting Task 5-style open search.
+ */
+export const isBudgetExploreQuery = (text: string): boolean =>
+  !destinationFromText(text) &&
+  maxPriceFromText(text) != null &&
+  (/\bweekend\b/i.test(text) || /\banywhere\b|\bsomewhere\b|\bwhere\b/i.test(text)) &&
+  /\b(?:fly|flying|flight|flights|options?|go|travel|trip)\b/i.test(text);
+
+/** Anywhere wording OR an open budget/weekend explore with no city named. */
+export const isOpenExploreQuery = (text: string): boolean =>
+  isAnywhereQuery(text) || isBudgetExploreQuery(text);
+
+/**
  * "after 6pm" / "after 18:00" / "leaves after 6" → "18:00".
  * Bare "evening" (no explicit clock time) → "18:00".
  * "from 6pm" requires am/pm so "from 10 September" is never read as a time.
@@ -452,12 +484,12 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
   // can never be off-topic — and off_topic short-circuits ahead of every slot
   // read in handleParsedSlot, so it has to be cleared here to take effect.
   if (isPureRefinement(text)) slot.off_topic = false;
-  // "Anywhere" exploration is a destination-suggestion request
-  if (!slot.anywhere && !String(slot.destination ?? '').trim() && isAnywhereQuery(text)) {
+  // Open exploration (anywhere / budget-weekend with no city) clears a leftover
+  // destination from the previous task in this thread.
+  if (isOpenExploreQuery(text) && !destinationFromText(text)) {
     slot.anywhere = true;
-  }
-  
-  if (slot.anywhere && !isAnywhereQuery(text)) {
+    slot.destination = null;
+  } else if (slot.anywhere && !isOpenExploreQuery(text)) {
     slot.anywhere = false;
   }
   if (isCompareQuery(text)) {
@@ -476,6 +508,12 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
   }
   if (!slot.low_co2 && isLowCo2Query(text)) slot.low_co2 = true;
   if (!slot.round_trip && isRoundTripQuery(text)) slot.round_trip = true;
+  // Explicit one-way always wins over "return trip" echoes and over the
+  // anywhere→city default that forces round_trip.
+  if (isOneWayQuery(text)) {
+    slot.round_trip = false;
+    slot.return_only = false;
+  }
 
   // Prefer facts the user typed over whatever the model invented or dropped.
   // Destination: if the message names a city, that city wins — this is what
@@ -584,8 +622,29 @@ export const resolveTurnSlot = (
   nextRaw: SlotJSON,
   text: string
 ): SlotJSON => {
-  const wantsAnywhere = Boolean(nextRaw.anywhere) && isAnywhereQuery(text);
-  if (!prev || RESET_CUE.test(text) || wantsAnywhere || nextRaw.off_topic) return nextRaw;
+  const wantsExplore = Boolean(nextRaw.anywhere) && isOpenExploreQuery(text);
+  if (!prev || RESET_CUE.test(text) || nextRaw.off_topic) return nextRaw;
+
+  // Open exploration keeps budget/weekend from the previous turn but drops the
+  // previous city, dates, and time filters — "pick from anywhere in Europe"
+  // after an Amsterdam search must not lose the £150 cap, and "weekend for
+  // £150" must not keep Amsterdam + after 6pm.
+  if (wantsExplore) {
+    return {
+      ...nextRaw,
+      anywhere: true,
+      destination: null,
+      departure_after: null,
+      departure_before: null,
+      compare: false,
+      cheapest_when: false,
+      round_trip: false,
+      return_only: false,
+      max_price: hasValue(nextRaw.max_price) ? nextRaw.max_price : prev.max_price ?? null,
+      weekend: Boolean(nextRaw.weekend) || Boolean(prev.weekend) || /\bweekend\b/i.test(text),
+      missing: [],
+    };
+  }
 
   // A refinement of the results on screen names no destination and no date of
   // its own, so anything the model returned in those two fields came from the
@@ -617,13 +676,18 @@ export const resolveTurnSlot = (
     (textDest !== null && prevDest !== null && textDest !== prevDest);
 
   // A destination picked from a prior budget/anywhere search (no destination
-  // named yet) defaults to round trip: the user is choosing somewhere to
-  // actually go, not just checking one-way fares.
+  // named yet) defaults to round trip — unless the user said one-way.
   const fromExploration = Boolean(prev.anywhere) && !hasValue(prev.destination);
+  const oneWay = isOneWayQuery(text);
 
   if ((destinationIntroduced && !isModifier) || (hasDestination && hasDates && !isModifier)) {
-    const fresh = fromExploration ? { ...next, round_trip: true } : { ...next };
+    const fresh =
+      fromExploration && !oneWay ? { ...next, round_trip: true } : { ...next };
     if (textDestRaw) fresh.destination = textDestRaw;
+    if (oneWay) {
+      fresh.round_trip = false;
+      fresh.return_only = false;
+    }
     // A brand-new city search must not keep prior-task filters the current
     // message did not restate.
     if (destinationIntroduced && !isModifier) {
@@ -638,6 +702,10 @@ export const resolveTurnSlot = (
       if (!isRoundTripQuery(text) && !fromExploration) fresh.round_trip = false;
       if (!isReturnOnlyQuery(text)) fresh.return_only = false;
       if (isCompareQuery(text) || !isDirectOnlyQuery(text)) fresh.direct_only = null;
+      if (oneWay) {
+        fresh.round_trip = false;
+        fresh.return_only = false;
+      }
     }
     return fresh;
   }
@@ -658,6 +726,10 @@ export const resolveTurnSlot = (
   if (dropsDirect && next.direct_only == null) merged.direct_only = null;
   if (!isCompareQuery(text)) merged.compare = false;
   if (!isCheapestWhenQuery(text)) merged.cheapest_when = false;
+  if (oneWay) {
+    merged.round_trip = false;
+    merged.return_only = false;
+  }
   if (SAME_DATE_CUE.test(text) && (hasValue(prev.date_from) || hasValue(prev.date_to))) {
     merged.date_from = prev.date_from;
     merged.date_to = prev.date_to;
