@@ -106,14 +106,15 @@ for (const [name, intent] of [
   );
 
   const pair = cheapestPair(legs);
-  const expected = Math.min(...legs.outbound.map((f) => f.price_gbp)) +
-    Math.min(...legs.inbound.map((f) => f.price_gbp));
-  check(
-    'combined total is cheapest outbound + cheapest return',
-    Math.abs((pair?.total ?? -1) - expected) < 0.005,
-    `£${pair?.total.toFixed(2)} vs £${expected.toFixed(2)}`
-  );
-  check('total appears in the answer text', answer.text.includes(`£${pair!.total.toFixed(2)}`));
+  check('paired return is after outbound', Boolean(pair && pair.inbound.date > pair.outbound.date));
+  if (pair) {
+    const span =
+      (new Date(`${pair.inbound.date}T00:00:00`).getTime() -
+        new Date(`${pair.outbound.date}T00:00:00`).getTime()) /
+      86400000;
+    check('paired return within 4 days (pinned itinerary)', span >= 1 && span <= 4, `span=${span}`);
+  }
+  check('total appears in the answer text', Boolean(pair) && answer.text.includes(`£${pair!.total.toFixed(2)}`));
   console.log(`  text: ${answer.text.replace(/\s+/g, ' ').slice(0, 220)}`);
 }
 
