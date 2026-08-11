@@ -1,8 +1,8 @@
 /**
  * Reproduction harness for the five bugs found in the live multi-turn session:
  *
- *   "Compare direct vs connecting to Rome on 3 August" -> "Only show direct
- *   flights" -> "Sort them by fastest" -> "find a flight for 4th august
+ *   "Compare direct vs connecting to Rome on 7 August" -> "Only show direct
+ *   flights" -> "Sort them by fastest" -> "find a flight for 10th august
  *   instead" -> "rome" -> "under 25" -> "for sevilla for same date?" ->
  *   "Seville?"
  *
@@ -74,7 +74,7 @@ const truthFor = (destCode: string, date: string) => {
   };
 };
 
-const rome3 = truthFor('FCO', '2026-08-03');
+const rome3 = truthFor('FCO', '2026-08-07');
 
 // --- The app's own gates, mirrored (same shape as pipeline-test's runSlot) ---
 const runSlot = (slot: SlotJSON) => {
@@ -105,21 +105,21 @@ const check = (id: string, problems: string[], note = '') => {
   }
 };
 
-console.log('— CSV ground truth: Rome (FCO) outbound 2026-08-03 —');
+console.log('— CSV ground truth: Rome (FCO) outbound 2026-08-07 —');
 console.log(`  ${rome3.all.length} flights; cheapest direct £${rome3.cheapestDirect!.price_gbp.toFixed(2)} (${rome3.cheapestDirect!.duration_formatted}), cheapest 1-stop £${rome3.cheapestStop!.price_gbp.toFixed(2)} (${rome3.cheapestStop!.duration_formatted}), min price £${rome3.minPrice.toFixed(2)}\n`);
 
-// Turn 1: "Compare direct vs connecting to Rome on 3 August"
+// Turn 1: "Compare direct vs connecting to Rome on 7 August"
 const turn1Slot: SlotJSON = applyWordingBackstops(
   {
     destination: 'Rome',
-    date_from: '2026-08-03',
-    date_to: '2026-08-03',
+    date_from: '2026-08-07',
+    date_to: '2026-08-07',
     cabin: null,
     direct_only: null,
     sort: 'cheapest',
     missing: [],
   },
-  'Compare direct vs connecting to Rome on 3 August'
+  'Compare direct vs connecting to Rome on 7 August'
 );
 const turn1 = runSlot(turn1Slot);
 
@@ -194,22 +194,22 @@ const turn1 = runSlot(turn1Slot);
       text
     );
 
-  // "find a flight for 4th august instead" — dates only, must keep Rome
+  // "find a flight for 10th august instead" — dates only, must keep Rome
   const t4 = resolveTurnSlot(
     turn1Slot,
-    parsed('find a flight for 4th august instead', { date_from: '2026-08-04', date_to: '2026-08-04' }),
-    'find a flight for 4th august instead'
+    parsed('find a flight for 10th august instead', { date_from: '2026-08-10', date_to: '2026-08-10' }),
+    'find a flight for 10th august instead'
   );
-  if (String(t4.destination).toLowerCase() !== 'rome') p.push(`"4th august instead" lost destination (${t4.destination})`);
-  if (t4.date_from !== '2026-08-04') p.push(`"4th august instead" lost the new date (${t4.date_from})`);
-  if (t4.compare) p.push('"4th august instead" carried the stale compare flag');
+  if (String(t4.destination).toLowerCase() !== 'rome') p.push(`"10th august instead" lost destination (${t4.destination})`);
+  if (t4.date_from !== '2026-08-10') p.push(`"10th august instead" lost the new date (${t4.date_from})`);
+  if (t4.compare) p.push('"10th august instead" carried the stale compare flag');
 
-  // "under 25" — a bare constraint; must keep Rome AND the 4 Aug date. The
+  // "under 25" — a bare constraint; must keep Rome AND the 10 Aug date. The
   // model tends to flag this as an "anywhere" search: unsupported by the
   // wording, so it must be ignored rather than searching the whole network.
   const t6 = resolveTurnSlot(t4, parsed('under 25', { max_price: 25, anywhere: true }), 'under 25');
   if (String(t6.destination).toLowerCase() !== 'rome') p.push(`"under 25" lost destination (${t6.destination})`);
-  if (t6.date_from !== '2026-08-04') p.push(`"under 25" lost the date (${t6.date_from})`);
+  if (t6.date_from !== '2026-08-10') p.push(`"under 25" lost the date (${t6.date_from})`);
   if (t6.anywhere) p.push('"under 25" kept an unsupported anywhere flag');
   const t6res = runSlot(t6).results;
   if (t6res.length > 20) p.push(`"under 25" returned ${t6res.length} flights across the network`);
@@ -221,7 +221,7 @@ const turn1 = runSlot(turn1Slot);
     'for sevilla for same date?'
   );
   if (String(t7.destination).toLowerCase() !== 'sevilla') p.push(`"for sevilla" lost the new destination (${t7.destination})`);
-  if (t7.date_from !== '2026-08-04') p.push(`"for sevilla for same date?" lost the date (${t7.date_from})`);
+  if (t7.date_from !== '2026-08-10') p.push(`"for sevilla for same date?" lost the date (${t7.date_from})`);
 
   // A clearly NEW query (destination + dates, no modifier cue) resets instead.
   const fresh = resolveTurnSlot(
@@ -251,12 +251,12 @@ const turn1 = runSlot(turn1Slot);
       if (!codes.includes('SVQ')) p.push(`"${spelling}" does not resolve to SVQ (got [${codes}])`);
     }
     const sevRes = runSlot({
-      destination: 'sevilla', date_from: '2026-08-04', date_to: '2026-08-04',
+      destination: 'sevilla', date_from: '2026-08-10', date_to: '2026-08-10',
       cabin: null, direct_only: null, sort: null, missing: [],
     } as SlotJSON).results;
-    const sevTruth = truthFor('SVQ', '2026-08-04');
+    const sevTruth = truthFor('SVQ', '2026-08-10');
     if (sevRes.length !== sevTruth.all.length)
-      p.push(`"sevilla" on 4 Aug -> ${sevRes.length} results (CSV says ${sevTruth.all.length})`);
+      p.push(`"sevilla" on 10 Aug -> ${sevRes.length} results (CSV says ${sevTruth.all.length})`);
   }
   check('SEVILLE spelling', p, `resolves to SVQ`);
 }

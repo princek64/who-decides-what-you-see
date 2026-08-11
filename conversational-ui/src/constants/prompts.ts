@@ -99,16 +99,16 @@ RULES:
 12. DETAIL QUESTIONS return an EMPTY search: destination, dates, and every filter stay null, "missing" is [], and detail_field carries the field asked about. The app answers those from the flight already on screen — do not turn them into a new search.
 
 EXAMPLES (input -> output):
-- "cheapest direct flight to Barcelona on 14 July"
-  -> {"destination":"Barcelona","date_from":"2026-07-14","date_to":"2026-07-14","cabin":null,"direct_only":true,"sort":"cheapest","missing":[],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
+- "cheapest direct flight to Barcelona on 16 October"
+  -> {"destination":"Barcelona","date_from":"2026-10-16","date_to":"2026-10-16","cabin":null,"direct_only":true,"sort":"cheapest","missing":[],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
 - "I want to fly somewhere in September for under £120"
   -> {"destination":null,"date_from":"2026-09-01","date_to":"2026-09-30","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":120,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":true,"detail_field":null,"detail_target":null,"off_topic":false}
 - "You have £150 and a free weekend, where could you go?"
   -> {"destination":null,"date_from":null,"date_to":null,"cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":150,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":true,"detail_field":null,"detail_target":null,"off_topic":false}
 - "where can I fly from London for under £50?"
   -> {"destination":null,"date_from":null,"date_to":null,"cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":50,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":true,"detail_field":null,"detail_target":null,"off_topic":false}
-- "compare a direct flight to Rome with one that has a stop on 10 July"
-  -> {"destination":"Rome","date_from":"2026-07-10","date_to":"2026-07-10","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
+- "compare a direct flight to Rome with one that has a stop on 15 November"
+  -> {"destination":"Rome","date_from":"2026-11-15","date_to":"2026-11-15","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
 - "You're flying to Rome. Compare a direct flight against one with a stop. Which would you pick, and why?"
   -> {"destination":"Rome","date_from":null,"date_to":null,"cabin":null,"direct_only":null,"sort":"cheapest","missing":["dates"],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
 - "What is the cheapest weekend to fly to Paris in the next 3 months?"
@@ -117,8 +117,10 @@ EXAMPLES (input -> output):
   -> {"destination":"Lisbon","date_from":"2026-09-01","date_to":"2026-11-30","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
 - "under 25"
   -> {"destination":null,"date_from":null,"date_to":null,"cabin":null,"direct_only":null,"sort":"cheapest","missing":["destination","dates"],"origin":null,"max_price":25,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
-- "flights from Manchester to Paris on 10 July"
-  -> {"destination":"Paris","date_from":"2026-07-10","date_to":"2026-07-10","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":"Manchester","max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
+- "flights from Manchester to Paris on 10 September"
+  -> {"destination":"Paris","date_from":"2026-09-10","date_to":"2026-09-10","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":"Manchester","max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
+- "Find a one-way flight to Amsterdam on 21 November that leaves after 6pm and costs under £80"
+  -> {"destination":"Amsterdam","date_from":"2026-11-21","date_to":"2026-11-21","cabin":null,"direct_only":null,"sort":"cheapest","missing":[],"origin":null,"max_price":80,"departure_after":"18:00","departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":null,"detail_target":null,"off_topic":false}
 - "what is the baggage allowance for the cheapest flight?"
   -> {"destination":null,"date_from":null,"date_to":null,"cabin":null,"direct_only":null,"sort":null,"missing":[],"origin":null,"max_price":null,"departure_after":null,"departure_before":null,"airline":null,"flexibility":null,"low_co2":null,"anywhere":false,"detail_field":"baggage","detail_target":"cheapest","off_topic":false}
 - "what plane is the easyJet one?"
