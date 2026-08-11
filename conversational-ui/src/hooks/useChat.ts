@@ -28,7 +28,7 @@ import {
   retryDelayMs,
   sleep,
 } from '../lib/apiRetry';
-import { matchStudyTaskSlot } from '../lib/studyTasks';
+import { tryLocalSlot } from '../lib/studyTasks';
 import { useSessionLogger } from './useSessionLogger';
 import { buildProseAnswer, describeConstraints } from '../lib/prose';
 import {
@@ -637,14 +637,15 @@ export const useChat = () => {
     const previousSlot =
       [...messages].reverse().find((m) => m.role === 'assistant' && m.slot)?.slot ?? null;
 
-    // Scripted study tasks (and close variants) resolve locally — no Groq call.
-    // This is the main quota shield during participant testing: each cold call
-    // otherwise burns thousands of tokens against the shared daily ceiling.
-    const studySlot = matchStudyTaskSlot(text);
-    if (studySlot) {
+    // Prefer a local slot whenever wording (plus prior context) is enough.
+    // Scripted study tasks and most mid-task follow-ups never touch Groq —
+    // each cold call otherwise burns thousands of tokens against the shared
+    // daily ceiling, which is what kills evening participant sessions.
+    const localSlot = tryLocalSlot(text, previousSlot != null);
+    if (localSlot) {
       try {
-        await handleParsedSlot(resolveTurnSlot(previousSlot, studySlot, text), {
-          study_task_golden: true,
+        await handleParsedSlot(resolveTurnSlot(previousSlot, localSlot, text), {
+          local_slot: true,
           skipped_groq: true,
         });
       } finally {

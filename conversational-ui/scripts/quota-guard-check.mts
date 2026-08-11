@@ -13,7 +13,9 @@ import {
   retryAfterSeconds,
   retryDelayMs,
 } from '../src/lib/apiRetry';
-import { matchStudyTaskSlot } from '../src/lib/studyTasks';
+import { matchStudyTaskSlot, tryLocalSlot } from '../src/lib/studyTasks';
+import { resolveTurnSlot } from '../src/lib/slots';
+import type { SlotJSON } from '../src/lib/slots';
 import { getSearchAnchor } from '../src/constants/prompts';
 
 let pass = 0;
@@ -152,6 +154,43 @@ const TPD_MSG =
     'ordinary Barcelona without date is NOT golden',
     matchStudyTaskSlot('cheapest direct flight to Barcelona') == null
   );
+}
+
+// ── Broader local-first (follow-ups that used to burn Groq) ───────────────
+{
+  const prev: SlotJSON = {
+    destination: 'Paris',
+    date_from: '2026-08-28',
+    date_to: '2026-08-28',
+    cabin: 'Economy',
+    direct_only: null,
+    sort: 'cheapest',
+    missing: [],
+    weekend: true,
+    round_trip: true,
+  };
+
+  const weekendOf = tryLocalSlot('show me for the weekend of august 28th', true);
+  check('weekend-of follow-up is local', Boolean(weekendOf));
+  const weekendResolved = resolveTurnSlot(prev, weekendOf!, 'show me for the weekend of august 28th');
+  check('weekend-of keeps Paris', weekendResolved.destination === 'Paris');
+  check('weekend-of sets Aug 28', weekendResolved.date_from === '2026-08-28');
+
+  const afterSix = tryLocalSlot('one that leaves after 6 pm from london', true);
+  check('after-6pm follow-up is local', Boolean(afterSix));
+  const afterResolved = resolveTurnSlot(prev, afterSix!, 'one that leaves after 6 pm from london');
+  check('after-6pm keeps Paris', afterResolved.destination === 'Paris');
+  check('after-6pm sets 18:00', afterResolved.departure_after === '18:00');
+
+  const bareDate = tryLocalSlot('on november 21st?', true);
+  check('bare date follow-up is local with prior', Boolean(bareDate));
+
+  const barcelonaAsk = tryLocalSlot('cheapest direct flight to Barcelona', false);
+  check('Barcelona without date is local (asks dates)', barcelonaAsk?.destination === 'Barcelona');
+  check('Barcelona without date missing dates', barcelonaAsk?.missing?.includes('dates') === true);
+
+  check('hotel stays off local path', tryLocalSlot('can you book me a hotel in Barcelona') == null);
+  check('no prior + bare date is NOT local', tryLocalSlot('on november 21st?', false) == null);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
