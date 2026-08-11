@@ -16,11 +16,11 @@ import {
 } from '../lib/apiRetry';
 import { loadFlightData } from '../lib/flightData';
 import {
-  isReturnOnlyQuery,
-  isPureRefinement,
-  destinationFromText,
-  dateFromText,
-} from '../lib/returnLeg';
+  resolveTurnIntent,
+  shouldOmitGroqHistory,
+  tryLocalIntent,
+} from '../lib/intentBackstops';
+import type { GenIntent } from '../lib/intentBackstops';
 import { buildItinerary, nearbyAlternatives } from '../lib/layoutData';
 import { placeScreen } from '../lib/screenHistory';
 import type { ItineraryPair, AlertAlternatives } from '../lib/layoutData';
@@ -185,7 +185,11 @@ export const useGenChat = () => {
     );
   };
 
-  const callGroq = async (userMessage: string, history: ChatMessage[], isRetry = false): Promise<string> => {
+  const callGroq = async (
+    userMessage: string,
+    history: ChatMessage[],
+    isRetry = false
+  ): Promise<string> => {
     const userHistory = history
       .filter((msg) => msg.role === 'user')
       .slice(-3)
@@ -379,15 +383,35 @@ export const useGenChat = () => {
     // refinement instead of clicking it silently lost every established slot.
     const previousIntent =
       ([...messages].reverse().find((m) => m.role === 'assistant' && m.intent)?.intent ??
-        null) as (IntentJSON & { layout?: string }) | null;
+        null) as GenIntent | null;
+
+    // Local-first: study tasks and clear city/date / explore turns never call
+    // Groq. Also the main same-thread city fix — typed destination wins without
+    // the model echoing Barcelona from earlier userHistory.
+    const localIntent = tryLocalIntent(text, previousIntent != null);
+    if (localIntent) {
+      try {
+        const resolved = resolveTurnIntent(previousIntent, localIntent, text);
+        logAiResponse({ ...resolved, local_intent: true, skipped_groq: true });
+        await applyIntent(resolved, text);
+      } finally {
+        setIsLoading(false);
+        setLoadingPhase('thinking');
+      }
+      return;
+    }
+
+    // When the user names a NEW city (or starts an open explore), prior user
+    // turns in the Groq payload only teach the model to keep the old city.
+    const historyForGroq = shouldOmitGroqHistory(text, previousIntent) ? [] : messages;
 
     try {
-      let rawContent = await callGroqWithBackoff(text, messages);
+      let rawContent = await callGroqWithBackoff(text, historyForGroq);
       // Dev-only: dumps the full raw model JSON per query. Gated so it never
       // fires during a participant session (production build sets DEV = false).
       if (import.meta.env.DEV) console.log('[Groq Raw Response]', rawContent);
 
-      let intent: (IntentJSON & { layout?: string }) | null = null;
+      let intent: GenIntent | null = null;
       try {
         const cleanJsonString = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
         intent = JSON.parse(cleanJsonString);
@@ -396,7 +420,7 @@ export const useGenChat = () => {
         // The API call is deliberately OUTSIDE the inner try: a rate limit on
         // the retry must surface as the rate-limit notice, not be swallowed and
         // reported to the participant as "I couldn't understand that query".
-        rawContent = await callGroqWithBackoff(text, messages, true);
+        rawContent = await callGroqWithBackoff(text, historyForGroq, true);
         try {
           const cleanJsonStringRetry = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
           intent = JSON.parse(cleanJsonStringRetry);
@@ -419,69 +443,10 @@ export const useGenChat = () => {
         return;
       }
 
-      // Return-leg phrasings ("flights back from Barcelona", "the return leg")
-      // are sometimes answered by gpt-oss-20b with {"off_topic": true} and
-      // nothing else, discarding a destination and date the user gave. The
-      // off_topic check below returns before any wording backstop runs, so the
-      // correction has to happen here: clear the flag, then read the dropped
-      // destination/date off the message text. Only ever fills blanks — whatever
-      // the model did extract wins. Direction is left to the existing
-      // round-trip/return-only backstops further down, which already encode the
-      // precedence between them. Mirrors conversational-ui's
-      // applyWordingBackstops.
-      if (isReturnOnlyQuery(text)) {
-        intent.off_topic = false;
-        if (!intent.dest_city?.trim() && !intent.dest_code?.trim()) {
-          const destination = destinationFromText(text);
-          if (destination) intent.dest_city = destination;
-        }
-        if (!intent.date?.trim() && !intent.date_from?.trim() && !intent.date_to?.trim()) {
-          const date = dateFromText(text);
-          if (date) intent.date = date;
-        }
-      }
-
-      // General date backstop. The return-leg branch above only runs on
-      // return-leg wording, so a date the model dropped on any OTHER phrasing
-      // was never recovered — the turn fell through to "that search is a little
-      // too broad" or searched the whole window, for a date the user had
-      // plainly written. Stacking constraints into one sentence ("... on
-      // November 21st after 6pm under £80") is where that was reported. Runs
-      // only when the model returned no date at all, so anything it did extract
-      // is left alone.
-      if (!intent.date?.trim() && !intent.date_from?.trim() && !intent.date_to?.trim()) {
-        const date = dateFromText(text);
-        if (date) intent.date = date;
-      }
-
-      // A typed refinement of the screen on the canvas ("show me the other
-      // flight", "what about the one with a stop"). Only the last three USER
-      // messages are sent as history, so once the turn carrying the date falls
-      // out of that window the model answers these cold — and cold it echoes a
-      // destination and date out of the system prompt's few-shot examples
-      // instead of returning nothing, so the screen jumps to a city the user
-      // never asked for. Drop the fields the user did not type, then compose
-      // onto the previous intent exactly as refineView does for the chips: the
-      // established slots form the base, and whatever the model DID extract
-      // from this message (a stop, a time window, a price cap) overrides them.
-      if (previousIntent && isPureRefinement(text)) {
-        // A refinement of the current results is a flight turn by definition,
-        // and off_topic short-circuits ahead of everything below.
-        intent.off_topic = false;
-        const {
-          dest_city: _destCity,
-          dest_code: _destCode,
-          date: _date,
-          date_from: _dateFrom,
-          date_to: _dateTo,
-          ...refinements
-        } = intent;
-        intent = {
-          ...previousIntent,
-          ...refinements,
-          layout: refinements.layout ?? previousIntent.layout,
-        };
-      }
+      // Typed city / price / time / dates win; new city clears leaked filters.
+      // Replaces the thin return-leg-only / blank-date-only backstops that let
+      // Task 2 keep showing Barcelona after Task 1 in the same chat.
+      intent = resolveTurnIntent(previousIntent, intent, text);
 
       // Off-topic messages: answer politely instead of dumping the whole dataset
       if (intent.off_topic) {
@@ -535,40 +500,6 @@ export const useGenChat = () => {
         ]);
         setIsLoading(false);
         return;
-      }
-
-      // "weekend" is a day-of-week constraint the itinerary builder honours
-      // (outbound Fri/Sat, return Sun/Mon). The 8B model emits it inconsistently,
-      // so backstop it deterministically from the user's own wording.
-      if (!intent.weekend && /\bweekend\b/i.test(text)) {
-        intent.weekend = true;
-      }
-
-      // "return flight(s)"/"round trip" as a bare phrase means a ROUND TRIP
-      // ticket in everyday (especially UK) English, not "just the leg back" —
-      // show both directions, same as picking a city from a budget/anywhere
-      // search. Backstopped deterministically since the 8B model doesn't
-      // reliably emit "direction":"return" or compose it with 'both' either.
-      if (
-        /\breturn\s+flights?\b/i.test(text) ||
-        /\bround[- ]trip\b/i.test(text) ||
-        /\bthere\s+and\s+back\b/i.test(text)
-      ) {
-        intent.direction = 'both';
-      }
-
-      // "flight(s) back"/"the return leg" specifically single out the
-      // INBOUND leg only — unlike bare "return flight(s)" above. Deliberately
-      // does not match bare "...and come back on 14 July" (no adjacent
-      // flight/leg word), which is round-trip date phrasing, not a
-      // return-leg-only request.
-      if (
-        /\bflights?\s+back\b/i.test(text) ||
-        /\bflying\s+back\b/i.test(text) ||
-        /\b(?:return|inbound)\s+leg\b/i.test(text) ||
-        /\bcoming\s+back\s+flights?\b/i.test(text)
-      ) {
-        intent.direction = 'return';
       }
 
       await applyIntent(intent, text);
