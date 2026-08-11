@@ -24,10 +24,11 @@ import { buildComparisonSentence, buildCheapestWhenSentence, cheapestBy } from '
 import {
   MAX_API_RETRIES,
   friendlyApiError,
-  isRetryableStatus,
+  isRetryableError,
   retryDelayMs,
   sleep,
 } from '../lib/apiRetry';
+import { matchStudyTaskSlot } from '../lib/studyTasks';
 import { useSessionLogger } from './useSessionLogger';
 import { buildProseAnswer, describeConstraints } from '../lib/prose';
 import {
@@ -216,13 +217,14 @@ export const useChat = () => {
         return await callGroq(userMessage, isRetry);
       } catch (err: any) {
         const status: number | undefined = err?.status;
-        const retryable = isRetryableStatus(status);
+        const retryable = isRetryableError(err);
 
         logAiResponse({
           api_error: true,
           status: status ?? null,
           attempt: attempt + 1,
           retryable,
+          daily_quota: !retryable && status === 429,
           message: String(err?.message ?? err).slice(0, 300),
           at: new Date().toISOString(),
         });
@@ -245,8 +247,11 @@ export const useChat = () => {
     ]);
   };
 
-  const handleParsedSlot = async (slot: SlotJSON) => {
-    logAiResponse(slot);
+  const handleParsedSlot = async (
+    slot: SlotJSON,
+    meta: Record<string, unknown> = {}
+  ) => {
+    logAiResponse({ ...slot, ...meta });
 
     if (slot.off_topic) {
       pushAssistant({
@@ -632,6 +637,23 @@ export const useChat = () => {
     const previousSlot =
       [...messages].reverse().find((m) => m.role === 'assistant' && m.slot)?.slot ?? null;
 
+    // Scripted study tasks (and close variants) resolve locally — no Groq call.
+    // This is the main quota shield during participant testing: each cold call
+    // otherwise burns thousands of tokens against the shared daily ceiling.
+    const studySlot = matchStudyTaskSlot(text);
+    if (studySlot) {
+      try {
+        await handleParsedSlot(resolveTurnSlot(previousSlot, studySlot, text), {
+          study_task_golden: true,
+          skipped_groq: true,
+        });
+      } finally {
+        setIsLoading(false);
+        setLoadingPhase('thinking');
+      }
+      return;
+    }
+
     try {
       let rawContent = await callGroqWithBackoff(text);
 
@@ -677,7 +699,7 @@ export const useChat = () => {
           id: `sys-${Date.now()}`,
           role: 'system',
           text: message,
-          retryable: isRetryableStatus(err?.status),
+          retryable: isRetryableError(err),
           timestamp: Date.now(),
         },
       ]);
