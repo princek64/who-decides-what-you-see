@@ -1,5 +1,6 @@
 import type { Flight } from '../hooks/useFlightFilter';
 import { formatFlightDate } from './utils';
+import { cheapestPair, splitLegs } from './returnGroups';
 
 // Compact "1h 55m" from raw minutes (falls back to the CSV's formatted string).
 const fmtMins = (mins: number): string => {
@@ -110,10 +111,15 @@ export const buildComparisonSentence = (results: Flight[], destLabel: string): s
 };
 
 /**
- * Plain-text "cheapest day/weekend is X" statement. Weekend queries are
- * restricted to Sat/Sun. Like the comparison sentence, the pick is by PRICE
- * explicitly rather than by "first in the array" — otherwise a fastest-sorted
- * result set would name the quickest day and call it the cheapest.
+ * Plain-text "cheapest day/weekend is X" statement. Weekend queries use the
+ * same Fri/Sat/Sun definition as the filter (isWeekendDeparture). Like the
+ * comparison sentence, the pick is by PRICE explicitly rather than by "first
+ * in the array" — otherwise a fastest-sorted result set would name the
+ * quickest day and call it the cheapest.
+ *
+ * When both outbound and return legs are present (a round trip), name the
+ * cheapest pair and total instead of a single outbound day — Task 4 asks for
+ * a return trip, not a one-way fare.
  */
 export const buildCheapestWhenSentence = (
   results: Flight[],
@@ -122,12 +128,23 @@ export const buildCheapestWhenSentence = (
 ): string | null => {
   const isWeekendDay = (date: string) => {
     const day = new Date(`${date}T00:00:00`).getDay();
-    return day === 0 || day === 6; // Sun or Sat
+    return day === 5 || day === 6 || day === 0; // Fri, Sat, Sun — match filter
   };
   const pool = weekendOnly ? results.filter((f) => isWeekendDay(f.date)) : results;
+  const dest = destLabel ? ` to ${destLabel}` : '';
+  const label = weekendOnly ? 'weekend' : 'day';
+
+  const legs = splitLegs(pool);
+  const pair = cheapestPair(legs);
+  if (pair) {
+    return (
+      `The cheapest ${label} return${dest} is from £${pair.outbound.price_gbp.toFixed(2)} ` +
+      `outbound on ${formatFlightDate(pair.outbound.date)} plus £${pair.inbound.price_gbp.toFixed(2)} ` +
+      `return on ${formatFlightDate(pair.inbound.date)} (total £${pair.total.toFixed(2)}).`
+    );
+  }
+
   const cheapest = cheapestBy(pool);
   if (!cheapest) return null;
-  const dest = destLabel ? ` to ${destLabel}` : '';
-  const label = weekendOnly ? 'weekend day' : 'day';
-  return `The cheapest ${label} to fly${dest} is ${formatFlightDate(cheapest.date)} at £${cheapest.price_gbp.toFixed(2)}.`;
+  return `The cheapest ${label} day to fly${dest} is ${formatFlightDate(cheapest.date)} at £${cheapest.price_gbp.toFixed(2)}.`;
 };
