@@ -41,6 +41,16 @@ interface Case {
 
 const cases: Case[] = [
   {
+    name: '"show the one with the stop" opens connecting options',
+    prev: prevOpen,
+    text: 'show the one with the stop',
+    parsed: emptySlot(),
+    check: (s) =>
+      s.keep_stops === true && s.destination === 'Amsterdam'
+        ? null
+        : `keep_stops=${String(s.keep_stops)} dest=${String(s.destination)}`,
+  },
+  {
     name: '"include the ones with a stop" (prose offer wording) drops direct-only',
     prev: prevDirect,
     text: 'include the ones with a stop',

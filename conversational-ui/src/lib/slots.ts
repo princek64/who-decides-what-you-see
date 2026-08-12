@@ -170,14 +170,15 @@ export const isDirectOnlyQuery = (text: string): boolean =>
   /\bfly\s+direct\b/i.test(text) ||
   /\bnon[- ]?stops?\b/i.test(text);
 
-// "include flights with a stop" / "allow a stop" / accepting the prose offer
-// "Want me to include the ones with a stop". Also tolerates common typos
-// ("incluse") so a mistyped reply to that offer still opens the filter.
+// "include/show flights with a stop" / "allow a stop" / accepting the prose
+// offer "Want me to include the ones with a stop". Tolerates typos ("incluse")
+// and "the stop" / "a stop" so replies like "show the one with the stop" open
+// connecting options instead of becoming a stops detail lookup.
 export const isDropDirectQuery = (text: string): boolean =>
-  /\b(?:inclu\w*|allow|add|also show|consider|open up to|open it up to)\b[^.?!]{0,48}\b(?:stop|stops|stopover|stopovers|connecting|indirect)\b/i.test(
+  /\b(?:inclu\w*|allow|add|also show|show|see|consider|open up to|open it up to)\b[^.?!]{0,48}\b(?:stop|stops|stopover|stopovers|connecting|indirect)\b/i.test(
     text
   ) ||
-  /\b(?:the\s+)?(?:ones?|flights?)\s+with\s+(?:a\s+)?(?:stop|stops|stopover)\b/i.test(text) ||
+  /\b(?:the\s+)?(?:ones?|flights?)\s+with\s+(?:a\s+|the\s+)?(?:stop|stops|stopover)\b/i.test(text) ||
   /\b(?:don'?t|do not|no longer)\s+(?:keep|make|need)\s+(?:it\s+)?direct\b/i.test(text) ||
   /\bnot\s+just\s+direct\b/i.test(text);
 

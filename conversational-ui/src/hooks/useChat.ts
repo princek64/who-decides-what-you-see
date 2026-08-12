@@ -66,7 +66,10 @@ const groq = new Groq({
   dangerouslyAllowBrowser: true,
 });
 
-const SEARCH_STATUS_MS = 1800;
+const SEARCH_STATUS_MS = 2200;
+/** Shorter hold for clarifying questions / detail replies so the thread still
+ *  feels like the assistant is working, without the full search wait. */
+const REPLY_STATUS_MS = 1000;
 
 /** Yield until after the next paint so the Searching line is on screen
  *  before a local (Groq-skipped) search finishes and replaces it. */
@@ -77,9 +80,9 @@ const nextPaint = (): Promise<void> =>
     });
   });
 
-/** Hold the Searching line until it has been visible for SEARCH_STATUS_MS. */
-const holdSearchingStatus = async (loadingSince: number): Promise<void> => {
-  const remaining = SEARCH_STATUS_MS - (performance.now() - loadingSince);
+/** Hold the in-thread status until it has been visible for `minMs`. */
+const holdStatus = async (loadingSince: number, minMs: number): Promise<void> => {
+  const remaining = minMs - (performance.now() - loadingSince);
   if (remaining > 0) await sleep(remaining);
 };
 
@@ -272,7 +275,15 @@ export const useChat = () => {
   ) => {
     logAiResponse({ ...slot, ...meta });
 
+    // Brief status hold for short replies (clarify / refuse) so they don't
+    // flash in the instant a local slot resolves.
+    const holdBriefReply = async () => {
+      await nextPaint();
+      await holdStatus(loadingSince, REPLY_STATUS_MS);
+    };
+
     if (slot.off_topic) {
+      await holdBriefReply();
       pushAssistant({
         text: "I'm a flight search assistant, so I can't help with that — but I can find you flights from London to over 100 European destinations. Try asking something like \"cheapest direct flight to Barcelona in August\".",
       });
@@ -282,6 +293,7 @@ export const useChat = () => {
     // Origin outside London: the dataset is London-only. Say so and offer London.
     const origin = classifyOrigin(slot.origin);
     if (origin.kind === 'foreign') {
+      await holdBriefReply();
       pushAssistant({
         text: `I only have flights departing London right now. Want me to search from London instead?`,
         slot,
@@ -293,6 +305,7 @@ export const useChat = () => {
     // Explicit slot-filling (app decides, not the model)
     const missing = firstMissingRequiredSlot(slot);
     if (missing) {
+      await holdBriefReply();
       const text = missing === 'dates' ? datesQuestionFor(slot) : SLOT_QUESTIONS[missing];
       pushAssistant({ text, slot, awaitingSlot: missing });
       return;
@@ -310,6 +323,7 @@ export const useChat = () => {
     const resolvedDest = resolveDestCodes(intent);
     const namedDestination = Boolean(String(slot.destination ?? '').trim());
     if (namedDestination && resolvedDest.length === 0) {
+      await holdBriefReply();
       const askedFor = slot.destination;
       pushAssistant({
         text: `I couldn't find "${askedFor}" in this flight network. I cover flights from London to European destinations like Paris, Barcelona, Rome, Amsterdam and about 100 more. Try one of those?`,
@@ -326,9 +340,9 @@ export const useChat = () => {
     setLoadingPhase('searching');
     // Local searches resolve in milliseconds — paint, then hold the Searching
     // line so the fade is visible. Slow Groq turns already waited longer than
-    // SEARCH_STATUS_MS, so holdSearchingStatus becomes a no-op for them.
+    // SEARCH_STATUS_MS, so holdStatus becomes a no-op for them.
     await nextPaint();
-    await holdSearchingStatus(loadingSince);
+    await holdStatus(loadingSince, SEARCH_STATUS_MS);
 
     const filteredResults = filterAndSortFlights(flights, intent, medianCo2);
 
@@ -636,7 +650,15 @@ export const useChat = () => {
     // A follow-up turn: answer from the data
     const pool = currentPool();
     if (pool.length > 0 && isFollowUpDetail(text, pool)) {
-      answerFromData(text, pool);
+      setIsLoading(true);
+      const loadingSince = performance.now();
+      try {
+        await nextPaint();
+        await holdStatus(loadingSince, REPLY_STATUS_MS);
+        answerFromData(text, pool);
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -663,12 +685,28 @@ export const useChat = () => {
     // Answering locally also means the established destination, dates and
     // constraints cannot be disturbed: the previous intent is reused verbatim.
     if (isShowAllQuery(text)) {
-      showAllResults();
+      setIsLoading(true);
+      const loadingSince = performance.now();
+      try {
+        await nextPaint();
+        await holdStatus(loadingSince, REPLY_STATUS_MS);
+        showAllResults();
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
 
     if (isPickBestQuery(text)) {
-      pickBestForMe();
+      setIsLoading(true);
+      const loadingSince = performance.now();
+      try {
+        await nextPaint();
+        await holdStatus(loadingSince, REPLY_STATUS_MS);
+        pickBestForMe();
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
 
