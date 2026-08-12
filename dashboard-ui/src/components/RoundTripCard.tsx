@@ -111,27 +111,26 @@ export const RoundTripCard: React.FC<RoundTripCardProps> = ({ outbound, inbound,
           <LegRow flight={inbound} leg="return" />
         </div>
 
-        {/* Combined fare — per-leg breakdown sits directly above the total so
-            the money reads as one block when scanning left to right. Each leg
-            carries a mono uppercase micro-label so the two figures are legible. */}
+        {/* Combined fare first — participants scanning return trips look for the
+            total, not the per-leg figures. Breakdown stays secondary underneath. */}
         <div className="w-[112px] sm:w-[140px] shrink-0 border-l border-border bg-background flex flex-col items-center justify-center gap-1 px-2 sm:px-3 text-center">
-          <div className="w-full flex flex-col gap-0.5">
-            <div className="flex items-center justify-between gap-1.5">
-              <span className="text-[8px] font-mono uppercase tracking-wider text-muted-foreground truncate">Outbound</span>
-              <span className="text-[10px] sm:text-[11px] font-mono tabular-nums text-foreground shrink-0">£{outbound.price_gbp.toFixed(2)}</span>
-            </div>
-            <div className="flex items-center justify-between gap-1.5">
-              <span className="text-[8px] font-mono uppercase tracking-wider text-muted-foreground truncate">Return</span>
-              <span className="text-[10px] sm:text-[11px] font-mono tabular-nums text-foreground shrink-0">£{inbound.price_gbp.toFixed(2)}</span>
-            </div>
-          </div>
-          <div className="w-full h-px bg-border my-0.5" />
           <span className={`text-base sm:text-xl font-mono font-semibold tracking-tight text-foreground tabular-nums ${hasCancelledLeg ? 'line-through text-muted-foreground' : ''}`}>
             £{total.toFixed(2)}
           </span>
           <span className="text-[10px] text-muted-foreground leading-tight">
             total · {adults} adult{adults === 1 ? '' : 's'}
           </span>
+          <div className="w-full h-px bg-border my-0.5" />
+          <div className="w-full flex flex-col gap-0.5">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[8px] font-mono uppercase tracking-wider text-muted-foreground truncate">Outbound</span>
+              <span className="text-[10px] sm:text-[11px] font-mono tabular-nums text-muted-foreground shrink-0">£{outbound.price_gbp.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-[8px] font-mono uppercase tracking-wider text-muted-foreground truncate">Return</span>
+              <span className="text-[10px] sm:text-[11px] font-mono tabular-nums text-muted-foreground shrink-0">£{inbound.price_gbp.toFixed(2)}</span>
+            </div>
+          </div>
         </div>
       </Card>
     </div>
