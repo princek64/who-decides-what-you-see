@@ -6,6 +6,7 @@ import { TypingIndicator } from './TypingIndicator';
 import { Button } from './ui/button';
 import { PlaneTakeoff, Search, ChevronDown, Trash2 } from 'lucide-react';
 import { FlightSketchLogo } from './FlightSketchLogo';
+import { buildSearchingStatus } from '../lib/searchingStatus';
 
 // Stable module-level reference — an inline array literal as the hook's
 // `examples` prop would recreate on every render and restart the animation.
@@ -19,7 +20,6 @@ export const ChatView: React.FC = () => {
   const {
     csvLoading,
     isLoading,
-    loadingPhase,
     messages,
     sendMessage,
     refineOrigin,
@@ -176,6 +176,7 @@ export const ChatView: React.FC = () => {
   // The newest assistant message is the one whose origin picker stays live
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
   const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.text;
+  const searchingLabel = buildSearchingStatus(lastUserText ?? '');
   // A rate-limit notice is only actionable while it is the newest thing said.
   const lastMessageId = messages[messages.length - 1]?.id;
 
@@ -220,9 +221,7 @@ export const ChatView: React.FC = () => {
               typewriterActive
                 ? ''
                 : isLoading
-                  ? loadingPhase === 'searching'
-                    ? 'Searching flights… (you can keep typing)'
-                    : 'Thinking… (you can keep typing)'
+                  ? 'Searching… (you can keep typing)'
                   : 'Ask me anything about flights…'
             }
             aria-label="Message Flight Assistant"
@@ -347,7 +346,7 @@ export const ChatView: React.FC = () => {
                       </div>
                     );
                   })}
-                  {isLoading && <TypingIndicator phase={loadingPhase} />}
+                  {isLoading && <TypingIndicator label={searchingLabel} />}
                   <div ref={bottomRef} />
                   {/* Room to lift the newest turn to the top of the viewport */}
                   <div aria-hidden style={{ height: spacer }} />

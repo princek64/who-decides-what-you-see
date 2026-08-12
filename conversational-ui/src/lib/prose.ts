@@ -61,6 +61,9 @@ export interface ProseOptions {
   /** The user asked to see everything ("show me all options"). Lays the whole
    *  result set out as a table instead of summarising a preview of it. */
   showAll?: boolean;
+  /** Insight preface already named the cheapest pair — don't repeat it above
+   *  the leg tables (cheapest-weekend / cheapest-when answers). */
+  skipPairLead?: boolean;
 }
 
 /**
@@ -142,16 +145,14 @@ export const describeTimeWindow = (after?: string, before?: string): string => {
 };
 
 const flightBullet = (f: Flight, withDate: boolean, withDest: boolean): ProseNode[] => {
-  const dateBit = withDate ? ` on ${formatFlightDate(f.date)}` : '';
-  const destBit = withDest ? ` to ${destLabel(f.dest_code)}` : '';
+  const dateBit = withDate ? ` · ${formatFlightDate(f.date)}` : '';
+  const destBit = withDest ? ` · ${destLabel(f.dest_code)}` : '';
+  const stopBit = f.stops === 0 ? 'direct' : `${plural(f.stops, 'stop')}`;
   return [
-    { type: 'flight', text: `${f.airline_name} ${f.flight_number}`, flight: f },
+    { type: 'strong', text: `${f.airline_name} ${f.flight_number}` },
     {
       type: 'text',
-      text:
-        ` from ${airportLabel(f.origin_code)}${destBit}${dateBit} — ` +
-        `departs ${f.departure_time}, arrives ${f.arrival_time}` +
-        `${stopsClause(f)} (${f.duration_formatted}) — `,
+      text: ` · ${airportLabel(f.origin_code)}${destBit}${dateBit} · ${f.departure_time}→${f.arrival_time} · ${f.duration_formatted} · ${stopBit} · `,
     },
     { type: 'strong', text: money(f.price_gbp) },
     { type: 'text', text: ' — ' },
@@ -183,8 +184,8 @@ const flightDetailSentence = (f: Flight): ProseNode[] => [
 ];
 
 const cheapestLine = (f: Flight): ProseNode[] => [
-  { type: 'text', text: 'The cheapest option is ' },
-  { type: 'flight', text: f.airline_name, flight: f },
+  { type: 'text', text: 'Cheapest: ' },
+  { type: 'strong', text: f.airline_name },
   { type: 'text', text: ' at ' },
   { type: 'strong', text: money(f.price_gbp) },
   { type: 'text', text: '.' },
@@ -290,7 +291,8 @@ const buildRoundTripAnswer = (
   results: Flight[],
   intent: IntentJSON,
   legs: LegGroups,
-  showAll = false
+  showAll = false,
+  skipPairLead = false
 ): ProseAnswer => {
   const destination = destinationLabel(legs, intent);
   const constraints = describeConstraints(intent);
@@ -310,13 +312,15 @@ const buildRoundTripAnswer = (
 
   const lead = missing
     ? `I found ${plural(results.length, 'flight')}${constraints}, but nothing on the ${missing} leg — here is what there is:`
-    : `Here is the round trip${constraints} — ${plural(legs.outbound.length, 'outbound flight')} and ${plural(legs.inbound.length, 'return flight')}:`;
+    : skipPairLead
+      ? `Options on each leg${constraints}:`
+      : `Here is the round trip${constraints} — ${plural(legs.outbound.length, 'outbound flight')} and ${plural(legs.inbound.length, 'return flight')}:`;
 
   // Verdict first (bold total), then the leg options — so the trip price is not
-  // buried under two tables.
+  // buried under two tables. Skipped when a cheapest-when preface already said it.
   const pair = cheapestPair(legs);
   const blocks: ProseBlock[] = [];
-  if (pair) {
+  if (pair && !skipPairLead) {
     const destBit = destination ? ` to ${destination}` : '';
     blocks.push({
       kind: 'paragraph',
@@ -433,7 +437,13 @@ export const buildProseAnswer = (
   // every flight on each leg, still labelled. Flattening them into one table
   // would hand back exactly the interleaved list the grouping exists to undo.
   if (isTwoWayResult(intent) && results.length > 0) {
-    return buildRoundTripAnswer(results, intent, splitLegs(results), Boolean(opts.showAll));
+    return buildRoundTripAnswer(
+      results,
+      intent,
+      splitLegs(results),
+      Boolean(opts.showAll),
+      Boolean(opts.skipPairLead)
+    );
   }
 
   if (opts.showAll && results.length > 0) return buildShowAllAnswer(results, intent);
