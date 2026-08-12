@@ -451,25 +451,29 @@ export const useChat = () => {
     if (intent.direction === 'both' || source.slot?.round_trip) {
       const pair = cheapestPair(splitLegs(source.flights));
       if (pair) {
-        const text =
-          `I'd take this return${dest ? ` to ${dest}` : ''}: ` +
-          `${pair.outbound.airline_name} ${pair.outbound.flight_number} out on ` +
-          `${formatFlightDate(pair.outbound.date)} at ${pair.outbound.departure_time} ` +
-          `(£${pair.outbound.price_gbp.toFixed(2)}), coming back on ` +
-          `${formatFlightDate(pair.inbound.date)} with ${pair.inbound.airline_name} ` +
-          `${pair.inbound.flight_number} at ${pair.inbound.departure_time} ` +
-          `(£${pair.inbound.price_gbp.toFixed(2)}) — **£${pair.total.toFixed(2)}** total.`;
+        const verdict = `**I'd take this return${dest ? ` to ${dest}` : ''} — £${pair.total.toFixed(2)} total**`;
+        const text = [
+          verdict,
+          [
+            `- **Outbound:** **${pair.outbound.airline_name} ${pair.outbound.flight_number}** · ${formatFlightDate(pair.outbound.date)} · ${pair.outbound.departure_time} · **£${pair.outbound.price_gbp.toFixed(2)}**`,
+            `- **Return:** **${pair.inbound.airline_name} ${pair.inbound.flight_number}** · ${formatFlightDate(pair.inbound.date)} · ${pair.inbound.departure_time} · **£${pair.inbound.price_gbp.toFixed(2)}**`,
+          ].join('\n'),
+          "It's the cheapest pair in the current results.",
+        ].join('\n\n');
         logAiResponse({
           pick_best: true,
           kind: 'round_trip',
           total: pair.total,
           at: new Date().toISOString(),
         });
+        // Short preface only — FlightProse already leads with the pair total
+        // and leg tables; repeating the full bullet block would double up.
         pushAssistant({
           text,
           intent,
           slot: source.slot,
           flights: [pair.outbound, pair.inbound],
+          preface: verdict,
         });
         return;
       }
@@ -496,12 +500,14 @@ export const useChat = () => {
       pushAssistant({ text: "I couldn't pick a favourite from what's on screen — try refining the search." });
       return;
     }
-    const text =
-      `I'd take **${best.airline_name} ${best.flight_number}**` +
-      `${dest ? ` to ${dest}` : ''}` +
-      ` on ${formatFlightDate(best.date)} — departs ${best.departure_time}, ` +
-      `${best.stops === 0 ? 'direct' : `${best.stops}-stop`}, ` +
-      `£${best.price_gbp.toFixed(2)}. It's the cheapest option in the current results.`;
+    const verdict = `**I'd take ${best.airline_name} ${best.flight_number}${dest ? ` to ${dest}` : ''}**`;
+    const text = [
+      verdict,
+      [
+        `- **${formatFlightDate(best.date)}** · departs ${best.departure_time} · ${best.stops === 0 ? 'direct' : `${best.stops}-stop`} · **£${best.price_gbp.toFixed(2)}**`,
+      ].join('\n'),
+      "It's the cheapest option in the current results.",
+    ].join('\n\n');
     logAiResponse({
       pick_best: true,
       kind: 'one_way',
@@ -513,6 +519,7 @@ export const useChat = () => {
       intent,
       slot: source.slot,
       flights: [best],
+      preface: verdict,
     });
   };
 
