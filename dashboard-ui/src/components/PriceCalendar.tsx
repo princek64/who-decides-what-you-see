@@ -244,7 +244,7 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="w-full bg-card border border-border h-10 px-3 rounded-md text-sm font-medium text-foreground flex items-center gap-2 hover:border-white/20 focus:outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring transition-colors"
+          className="w-full bg-card border border-input h-10 px-3 rounded-md text-sm font-medium text-foreground flex items-center gap-2 hover:border-white/40 focus:outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring transition-colors"
         >
           <CalendarIcon className="w-4 h-4 text-muted-foreground shrink-0" />
           {isRange ? (
