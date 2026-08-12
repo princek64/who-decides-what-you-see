@@ -159,15 +159,16 @@ export const useChat = () => {
   const generateEmptyReply = (intent: IntentJSON) => {
     const stopInfo = intent.stops === 0 ? 'direct ' : intent.stops === 1 ? '1-stop ' : '';
     const suggestions = [
-      intent.stops === 0 ? 'allowing a stop' : null,
+      intent.stops === 0 ? 'allow a stop' : null,
       intent.max_price ? 'a higher budget' : null,
       'a different date',
       'a nearby destination',
     ].filter(Boolean) as string[];
-    return (
-      `No ${stopInfo}flights${describeConstraints(intent)} — nothing matches all of that. ` +
-      `Try ${suggestions.slice(0, 3).join(', ')}.`
-    );
+    return [
+      `**No ${stopInfo}flights${describeConstraints(intent)}.**`,
+      'Nothing matches all of that. Try:',
+      suggestions.map((s) => `- ${s}`).join('\n'),
+    ].join('\n\n');
   };
 
   // call Groq completions API.
@@ -325,6 +326,7 @@ export const useChat = () => {
 
     const prose = buildProseAnswer(filteredResults, intent, {
       keepStops: Boolean(slot.compare || slot.cheapest_when),
+      skipPairLead: Boolean(slot.cheapest_when),
     });
     pushAssistant({
       text: insight ? `${insight}\n\n${prose.text}` : prose.text,
