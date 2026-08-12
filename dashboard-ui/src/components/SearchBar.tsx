@@ -337,7 +337,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       <div className="flex flex-col gap-1.5 text-left flex-[1.4_1_180px] max-[480px]:basis-full">
         <label className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider">Origin</label>
         <Select value={originCode} onValueChange={setOriginCode}>
-          <SelectTrigger size="lg" className="w-full bg-transparent border-border font-medium text-foreground h-10 rounded-md">
+          <SelectTrigger size="lg" className="w-full bg-transparent border-input font-medium text-foreground h-10 rounded-md">
             <SelectValue placeholder="Origin" />
           </SelectTrigger>
           <SelectContent className="bg-popover border border-border shadow-modal">
@@ -390,7 +390,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             autoComplete="off"
             role="combobox"
             aria-expanded={showSuggestions}
-            className="pl-9 bg-transparent border-border h-10 font-medium text-foreground rounded-md"
+            className="pl-9 bg-transparent border-input h-10 font-medium text-foreground rounded-md"
           />
         </div>
 

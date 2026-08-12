@@ -142,7 +142,7 @@ export const ChatView: React.FC = () => {
       )}
 
       {/* Search pill: single-line query input, not a chat composer */}
-      <div className="flex-1 flex items-center gap-2 bg-white/[0.02] border border-white/15 rounded-full pl-4 pr-1.5 h-12 hover:border-white/25 focus-within:border-white/30 focus-within:ring-2 focus-within:ring-ring/40 transition-colors min-w-0">
+      <div className="flex-1 flex items-center gap-2 bg-white/[0.02] border border-input rounded-full pl-4 pr-1.5 h-12 hover:border-white/40 focus-within:border-white/45 focus-within:ring-2 focus-within:ring-ring/40 transition-colors min-w-0">
         <Search className="w-4 h-4 text-muted-foreground shrink-0" />
         <div className="relative flex-1 min-w-0">
           <input
