@@ -108,6 +108,43 @@ const renderInlineBold = (text: string) =>
     )
   );
 
+/**
+ * Insight / plain-text blocks: blank lines separate sections; consecutive
+ * "- " lines become a bullet list so compare / cheapest-when insights scan.
+ */
+const renderFormattedBlocks = (text: string, className = '') => {
+  const sections = text.split(/\n\n+/).filter((s) => s.trim());
+  return sections.map((section, i) => {
+    const lines = section.split('\n').map((l) => l.trim()).filter(Boolean);
+    const allBullets = lines.length > 0 && lines.every((l) => /^[-•]\s+/.test(l));
+    if (allBullets) {
+      return (
+        <ul
+          key={i}
+          className={`mt-2 space-y-1.5 text-sm leading-relaxed text-foreground ${className}`}
+        >
+          {lines.map((line, j) => (
+            <li key={j} className="flex gap-2">
+              <span aria-hidden className="text-muted-foreground select-none">
+                •
+              </span>
+              <span>{renderInlineBold(line.replace(/^[-•]\s+/, ''))}</span>
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return (
+      <p
+        key={i}
+        className={`text-sm leading-relaxed text-foreground ${i === 0 ? '' : 'mt-2.5'} ${className}`}
+      >
+        {renderInlineBold(section.replace(/\n/g, ' '))}
+      </p>
+    );
+  });
+};
+
 // Refinement is offered in WORDS now: buildProseAnswer ends the answer with a
 // follow-up question ("Want me to narrow it to direct flights only, …?"), and
 // the participant answers it by typing. There are no suggestion chips — the
@@ -188,15 +225,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         <>
           {/* "What I understood" note, stated before the answer */}
           <AssumptionLine intent={message.intent} onPickOrigin={onPickOrigin} />
-          {/* Comparison / cheapest-day insight, stated before the answer. Split
-              on blank lines so a verdict + supporting facts read as short,
-              scannable paragraphs instead of one dense sentence. */}
-          {message.preface &&
-            message.preface.split('\n\n').map((para, i) => (
-              <p key={i} className="text-sm leading-relaxed text-foreground [&:not(:first-child)]:mt-2 mb-2">
-                {renderInlineBold(para)}
-              </p>
-            ))}
+          {/* Comparison / cheapest-day insight, stated before the answer.
+              Verdict + why + option bullets (see insights.ts). */}
+          {message.preface && (
+            <div className="mb-3">{renderFormattedBlocks(message.preface)}</div>
+          )}
           <FlightProse
             flights={message.flights!}
             intent={message.intent || {}}
@@ -205,9 +238,9 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           />
         </>
       ) : (
-        <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
-          {renderInlineBold(message.text)}
-        </p>
+        <div className="text-sm leading-relaxed text-foreground">
+          {renderFormattedBlocks(message.text)}
+        </div>
       )}
 
       {/* "I only fly from London" offer — search from London instead */}

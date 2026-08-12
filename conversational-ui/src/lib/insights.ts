@@ -9,6 +9,8 @@ const fmtMins = (mins: number): string => {
   return `${h ? `${h}h ` : ''}${m}m`;
 };
 
+const money = (n: number): string => `£${n.toFixed(2)}`;
+
 /**
  * The cheapest flight in a set, chosen by PRICE and nothing else.
  *
@@ -42,20 +44,15 @@ export const cheapestBy = (pool: Flight[]): Flight | null => {
 };
 
 /**
- * Plain-text direct-vs-connecting tradeoff + a light recommendation, built from
- * the cheapest flight of each kind in the result set. Mirrors the insight the
- * generative-ui comparison template synthesizes, but rendered as a sentence so
- * the conversational app can keep showing a flat card list below.
+ * Direct-vs-connecting tradeoff + light recommendation.
  *
- * `results` is the SAME array the cards and the stats panel are rendered from,
- * so the quoted figures and the panel's Min Price cannot disagree: the panel's
- * minimum is by definition the cheaper of the two flights quoted here.
+ * Shape (scannable for chat):
+ * 1. Bold verdict
+ * 2. One short "why" sentence
+ * 3. Two option bullets with bold prices
+ *
+ * Numbers still come from the SAME `results` array the cards/table render from.
  */
-// Returns short, single-idea paragraphs (verdict, then why, then the two
-// options) joined by blank lines — rendered as separate <p> tags — instead of
-// one dense multi-clause sentence. Every figure still comes straight off the
-// SAME `results` array the cards/table render from; only the prose shape
-// changed, not the numbers.
 export const buildComparisonSentence = (results: Flight[], destLabel: string): string | null => {
   // A one-way "to Rome" compare must use outbound legs only. When a prior
   // round-trip flag leaked into the search, the cheapest "direct to Rome" was
@@ -71,14 +68,14 @@ export const buildComparisonSentence = (results: Flight[], destLabel: string): s
   if (!direct && !connecting) return null;
   if (direct && !connecting) {
     return (
-      `Only direct flights${dest} are available.\n\n` +
-      `Cheapest is £${direct.price_gbp.toFixed(2)} (${direct.duration_formatted}). No connecting option to compare.`
+      `**Only direct flights${dest} are available.**\n\n` +
+      `Cheapest is **${money(direct.price_gbp)}** · ${direct.duration_formatted} · ${direct.airline_name}. No connecting option to compare.`
     );
   }
   if (connecting && !direct) {
     return (
-      `Only connecting flights${dest} are available.\n\n` +
-      `Cheapest is £${connecting.price_gbp.toFixed(2)} (${connecting.duration_formatted}). No direct option to compare.`
+      `**Only connecting flights${dest} are available.**\n\n` +
+      `Cheapest is **${money(connecting.price_gbp)}** · ${connecting.duration_formatted} · ${connecting.airline_name}. No direct option to compare.`
     );
   }
   const d = direct!;
@@ -88,13 +85,13 @@ export const buildComparisonSentence = (results: Flight[], destLabel: string): s
 
   let tradeoff: string;
   if (priceGap > 0 && timeGap > 0) {
-    tradeoff = `Direct costs £${priceGap.toFixed(2)} more but saves ${fmtMins(timeGap)}.`;
+    tradeoff = `Direct costs **${money(priceGap)}** more but saves ${fmtMins(timeGap)}.`;
   } else if (priceGap <= 0 && timeGap > 0) {
-    tradeoff = `Direct is both cheaper (by £${Math.abs(priceGap).toFixed(2)}) and ${fmtMins(timeGap)} faster.`;
+    tradeoff = `Direct is both cheaper (by **${money(Math.abs(priceGap))}**) and ${fmtMins(timeGap)} faster.`;
   } else if (priceGap > 0 && timeGap <= 0) {
-    tradeoff = `The stop is cheaper by £${priceGap.toFixed(2)} and no slower.`;
+    tradeoff = `The stop is cheaper by **${money(priceGap)}** and no slower.`;
   } else {
-    tradeoff = `The two are within £${Math.abs(priceGap).toFixed(2)} and ${fmtMins(Math.abs(timeGap))} of each other.`;
+    tradeoff = `The two are within **${money(Math.abs(priceGap))}** and ${fmtMins(Math.abs(timeGap))} of each other.`;
   }
 
   // Light recommendation: reward direct when the time saved is worth a modest
@@ -107,27 +104,23 @@ export const buildComparisonSentence = (results: Flight[], destLabel: string): s
   } else if (priceGap >= 40 && timeGap <= 90) {
     rec = "**I'd take the one with a stop** — the saving outweighs the short extra time.";
   } else {
-    rec = 'Pick the direct for speed, or the stop to save money — both are reasonable.';
+    rec = '**Either works** — pick the direct for speed, or the stop to save money.';
   }
 
+  // Bullets share one blank-line section so ChatBubble renders them as a list.
   return [
     rec,
     tradeoff,
-    `Direct${dest}: £${d.price_gbp.toFixed(2)} (${d.duration_formatted}).`,
-    `With a stop: £${c.price_gbp.toFixed(2)} (${c.duration_formatted}).`,
+    [
+      `- **Direct${dest}:** **${money(d.price_gbp)}** · ${d.duration_formatted} · ${d.airline_name}`,
+      `- **With a stop:** **${money(c.price_gbp)}** · ${c.duration_formatted} · ${c.airline_name}`,
+    ].join('\n'),
   ].join('\n\n');
 };
 
 /**
- * Plain-text "cheapest day/weekend is X" statement. Weekend queries use the
- * same Fri/Sat/Sun definition as the filter (isWeekendDeparture). Like the
- * comparison sentence, the pick is by PRICE explicitly rather than by "first
- * in the array" — otherwise a fastest-sorted result set would name the
- * quickest day and call it the cheapest.
- *
- * When both outbound and return legs are present (a round trip), name the
- * cheapest pair and total instead of a single outbound day — Task 4 asks for
- * a return trip, not a one-way fare.
+ * "Cheapest day/weekend is X" insight — verdict first, then the key facts as
+ * short bullets (or one line for a one-way day).
  */
 export const buildCheapestWhenSentence = (
   results: Flight[],
@@ -145,14 +138,20 @@ export const buildCheapestWhenSentence = (
   const legs = splitLegs(pool);
   const pair = cheapestPair(legs);
   if (pair) {
-    return (
-      `The cheapest ${label} return${dest} is £${pair.total.toFixed(2)} total — ` +
-      `£${pair.outbound.price_gbp.toFixed(2)} outbound on ${formatFlightDate(pair.outbound.date)} ` +
-      `and £${pair.inbound.price_gbp.toFixed(2)} return on ${formatFlightDate(pair.inbound.date)}.`
-    );
+    return [
+      `**Cheapest ${label} return${dest}: ${money(pair.total)} total**`,
+      [
+        `- **Outbound:** **${money(pair.outbound.price_gbp)}** · ${formatFlightDate(pair.outbound.date)} · ${pair.outbound.airline_name}`,
+        `- **Return:** **${money(pair.inbound.price_gbp)}** · ${formatFlightDate(pair.inbound.date)} · ${pair.inbound.airline_name}`,
+      ].join('\n'),
+    ].join('\n\n');
   }
 
   const cheapest = cheapestBy(pool);
   if (!cheapest) return null;
-  return `The cheapest ${label} day to fly${dest} is ${formatFlightDate(cheapest.date)} at £${cheapest.price_gbp.toFixed(2)}.`;
+  return (
+    `**Cheapest ${label}${dest}: ${money(cheapest.price_gbp)}**\n\n` +
+    `${formatFlightDate(cheapest.date)} · ${cheapest.airline_name} · ${cheapest.duration_formatted}` +
+    `${cheapest.stops === 0 ? ' · direct' : ` · ${cheapest.stops}-stop`}`
+  );
 };

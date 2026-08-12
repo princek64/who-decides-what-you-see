@@ -312,23 +312,51 @@ const buildRoundTripAnswer = (
     ? `I found ${plural(results.length, 'flight')}${constraints}, but nothing on the ${missing} leg — here is what there is:`
     : `Here is the round trip${constraints} — ${plural(legs.outbound.length, 'outbound flight')} and ${plural(legs.inbound.length, 'return flight')}:`;
 
-  const blocks: ProseBlock[] = [
-    { kind: 'paragraph', nodes: [{ type: 'text', text: lead }] },
-  ];
-
+  // Verdict first (bold total), then the leg options — so the trip price is not
+  // buried under two tables.
   const pair = cheapestPair(legs);
-  const closing: ProseBlock[] = [];
+  const blocks: ProseBlock[] = [];
   if (pair) {
+    const destBit = destination ? ` to ${destination}` : '';
+    blocks.push({
+      kind: 'paragraph',
+      nodes: [
+        {
+          type: 'strong',
+          text: `Cheapest return${destBit}: ${money(pair.total)} total`,
+        },
+      ],
+    });
+    blocks.push({
+      kind: 'bullets',
+      items: [
+        [
+          { type: 'strong', text: 'Outbound: ' },
+          {
+            type: 'text',
+            text: `${pair.outbound.airline_name} · ${money(pair.outbound.price_gbp)} · ${formatFlightDate(pair.outbound.date)}`,
+          },
+        ],
+        [
+          { type: 'strong', text: 'Return: ' },
+          {
+            type: 'text',
+            text: `${pair.inbound.airline_name} · ${money(pair.inbound.price_gbp)} · ${formatFlightDate(pair.inbound.date)}`,
+          },
+        ],
+      ],
+    });
+  }
+  blocks.push({ kind: 'paragraph', nodes: [{ type: 'text', text: lead }] });
+
+  const closing: ProseBlock[] = [];
+  if (!missing) {
     closing.push({
       kind: 'paragraph',
       nodes: [
-        { type: 'text', text: 'Cheapest round trip: ' },
-        { type: 'strong', text: money(pair.total) },
         {
           type: 'text',
-          text:
-            ` — ${pair.outbound.airline_name} out at ${money(pair.outbound.price_gbp)}` +
-            ` plus ${pair.inbound.airline_name} back at ${money(pair.inbound.price_gbp)}.`,
+          text: 'Legs below are sorted cheapest first. Want a different return day, or direct only?',
         },
       ],
     });
