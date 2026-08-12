@@ -64,7 +64,22 @@ const groq = new Groq({
   dangerouslyAllowBrowser: true,
 });
 
-const SEARCH_STEP_MS = 900;
+const SEARCH_STATUS_MS = 1800;
+
+/** Yield until after the next paint so the Searching line is on screen
+ *  before a local (Groq-skipped) search finishes and replaces it. */
+const nextPaint = (): Promise<void> =>
+  new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+
+/** Hold the Searching line until it has been visible for SEARCH_STATUS_MS. */
+const holdSearchingStatus = async (loadingSince: number): Promise<void> => {
+  const remaining = SEARCH_STATUS_MS - (performance.now() - loadingSince);
+  if (remaining > 0) await sleep(remaining);
+};
 
 let flightsDataPromise: Promise<any> | null = null;
 
@@ -250,7 +265,8 @@ export const useChat = () => {
 
   const handleParsedSlot = async (
     slot: SlotJSON,
-    meta: Record<string, unknown> = {}
+    meta: Record<string, unknown> = {},
+    loadingSince = performance.now()
   ) => {
     logAiResponse({ ...slot, ...meta });
 
@@ -306,7 +322,11 @@ export const useChat = () => {
     }
 
     setLoadingPhase('searching');
-    await sleep(SEARCH_STEP_MS);
+    // Local searches resolve in milliseconds — paint, then hold the Searching
+    // line so the fade is visible. Slow Groq turns already waited longer than
+    // SEARCH_STATUS_MS, so holdSearchingStatus becomes a no-op for them.
+    await nextPaint();
+    await holdSearchingStatus(loadingSince);
 
     const filteredResults = filterAndSortFlights(flights, intent, medianCo2);
 
@@ -345,8 +365,10 @@ export const useChat = () => {
     logUserMessage(echo);
     setLoadingPhase('searching');
     setIsLoading(true);
+    const loadingSince = performance.now();
+    await nextPaint();
     try {
-      await handleParsedSlot(slot);
+      await handleParsedSlot(slot, {}, loadingSince);
     } finally {
       setIsLoading(false);
       setLoadingPhase('thinking');
@@ -376,8 +398,14 @@ export const useChat = () => {
 
     setLoadingPhase('searching');
     setIsLoading(true);
+    const loadingSince = performance.now();
+    await nextPaint();
     try {
-      await handleParsedSlot({ ...previous, round_trip: true, return_only: false, missing: [] });
+      await handleParsedSlot(
+        { ...previous, round_trip: true, return_only: false, missing: [] },
+        {},
+        loadingSince
+      );
     } finally {
       setIsLoading(false);
       setLoadingPhase('thinking');
@@ -641,6 +669,9 @@ export const useChat = () => {
 
     setLoadingPhase('thinking');
     setIsLoading(true);
+    const loadingSince = performance.now();
+    // Commit the Searching indicator before a local slot resolves instantly.
+    await nextPaint();
 
     // The model classified this as a question ABOUT the flights on screen
     const previousSlot =
@@ -653,10 +684,14 @@ export const useChat = () => {
     const localSlot = tryLocalSlot(text, previousSlot != null);
     if (localSlot) {
       try {
-        await handleParsedSlot(resolveTurnSlot(previousSlot, localSlot, text), {
-          local_slot: true,
-          skipped_groq: true,
-        });
+        await handleParsedSlot(
+          resolveTurnSlot(previousSlot, localSlot, text),
+          {
+            local_slot: true,
+            skipped_groq: true,
+          },
+          loadingSince
+        );
       } finally {
         setIsLoading(false);
         setLoadingPhase('thinking');
@@ -696,7 +731,7 @@ export const useChat = () => {
 
       applyWordingBackstops(slot, text);
 
-      await handleParsedSlot(resolveTurnSlot(previousSlot, slot, text));
+      await handleParsedSlot(resolveTurnSlot(previousSlot, slot, text), {}, loadingSince);
     } catch (err: any) {
       console.error('[Groq API Error]', err?.status, err);
       const message = friendlyApiError(err);
