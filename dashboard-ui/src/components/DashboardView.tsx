@@ -236,6 +236,29 @@ export const DashboardView: React.FC = () => {
   const resultCount = isRoundTrip ? roundTripPairs.length : flights.length;
   const hasResults = resultCount > 0;
 
+  // StatsBar reads per-leg prices from useFlights. For round trips the list is
+  // itineraries, so "Cheapest" / "Total Found" must use combined pair fares
+  // and the pair count — otherwise cheapest shows a one-way leg (e.g. £62.54
+  // outbound) while every card shows the real trip total (£126.89).
+  const displayStats = React.useMemo(() => {
+    if (!isRoundTrip) return stats;
+    if (roundTripPairs.length === 0) {
+      return { total: 0, cheapest: 0, avgCo2: stats.avgCo2 };
+    }
+    let cheapest = Infinity;
+    let totalCo2 = 0;
+    for (const { out, ret } of roundTripPairs) {
+      const fare = out.price_gbp + ret.price_gbp;
+      if (fare < cheapest) cheapest = fare;
+      totalCo2 += out.co2_kg + ret.co2_kg;
+    }
+    return {
+      total: roundTripPairs.length,
+      cheapest: cheapest === Infinity ? 0 : cheapest,
+      avgCo2: parseFloat((totalCo2 / (roundTripPairs.length * 2)).toFixed(1)),
+    };
+  }, [isRoundTrip, roundTripPairs, stats]);
+
   // Groups results by destination city for an anywhere (no-destination) search.
   // Built from filteredFlights (the full route/filter match), NOT the capped
   // `flights`/roundTripPairs used to render rows and itineraries. Both of
@@ -570,9 +593,9 @@ export const DashboardView: React.FC = () => {
 
                 {/* 4. Stats Summary Card Row */}
                 <StatsBar
-                  total={stats.total}
-                  cheapest={stats.cheapest}
-                  avgCo2={stats.avgCo2}
+                  total={displayStats.total}
+                  cheapest={displayStats.cheapest}
+                  avgCo2={displayStats.avgCo2}
                   loading={resultsLoading}
                 />
 
