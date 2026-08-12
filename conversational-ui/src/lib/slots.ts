@@ -40,6 +40,10 @@ export interface SlotJSON {
    *  back from Barcelona"). Takes priority over round_trip. Persists across
    *  refinements like the other carried slots. */
   return_only?: boolean;
+  /** App-side only: show connecting flights even when the default prose rule
+   *  would hide them to prefer directs. Set by "include the ones with a stop"
+   *  follow-ups that answer that standing offer. */
+  keep_stops?: boolean;
 }
 
 // The only origin in the dataset is London. These are its airports.
@@ -166,9 +170,14 @@ export const isDirectOnlyQuery = (text: string): boolean =>
   /\bfly\s+direct\b/i.test(text) ||
   /\bnon[- ]?stops?\b/i.test(text);
 
-// "include flights with a stop" / "allow a stop"
+// "include flights with a stop" / "allow a stop" / accepting the prose offer
+// "Want me to include the ones with a stop". Also tolerates common typos
+// ("incluse") so a mistyped reply to that offer still opens the filter.
 export const isDropDirectQuery = (text: string): boolean =>
-  /\b(?:include|allow|add|also show|consider|open up to|open it up to)\b[^.?!]{0,40}\b(?:stop|stops|stopover|stopovers|connecting|indirect)\b/i.test(text) ||
+  /\b(?:inclu\w*|allow|add|also show|consider|open up to|open it up to)\b[^.?!]{0,48}\b(?:stop|stops|stopover|stopovers|connecting|indirect)\b/i.test(
+    text
+  ) ||
+  /\b(?:the\s+)?(?:ones?|flights?)\s+with\s+(?:a\s+)?(?:stop|stops|stopover)\b/i.test(text) ||
   /\b(?:don'?t|do not|no longer)\s+(?:keep|make|need)\s+(?:it\s+)?direct\b/i.test(text) ||
   /\bnot\s+just\s+direct\b/i.test(text);
 
@@ -505,6 +514,15 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
 
   if (slot.direct_only == null && !isCompareQuery(text) && isDirectOnlyQuery(text)) {
     slot.direct_only = true;
+    slot.keep_stops = false;
+  }
+  // Opening connecting options is a search refinement, not a detail question
+  // about how many stops a flight already on screen has.
+  if (isDropDirectQuery(text)) {
+    slot.direct_only = null;
+    slot.keep_stops = true;
+    slot.detail_field = null;
+    slot.off_topic = false;
   }
   if (!slot.low_co2 && isLowCo2Query(text)) slot.low_co2 = true;
   if (!slot.round_trip && isRoundTripQuery(text)) slot.round_trip = true;
@@ -606,6 +624,7 @@ const CARRYABLE_SLOTS = [
   'cheapest_when',
   'round_trip',
   'return_only',
+  'keep_stops',
 ] as const;
 
 const MODIFIER_CUE =
@@ -702,6 +721,7 @@ export const resolveTurnSlot = (
       if (!isRoundTripQuery(text) && !fromExploration) fresh.round_trip = false;
       if (!isReturnOnlyQuery(text)) fresh.return_only = false;
       if (isCompareQuery(text) || !isDirectOnlyQuery(text)) fresh.direct_only = null;
+      if (!isDropDirectQuery(text)) fresh.keep_stops = false;
       if (oneWay) {
         fresh.round_trip = false;
         fresh.return_only = false;
@@ -723,7 +743,10 @@ export const resolveTurnSlot = (
       (merged[key] as unknown) = prev[key];
     }
   }
-  if (dropsDirect && next.direct_only == null) merged.direct_only = null;
+  if (dropsDirect) {
+    merged.direct_only = null;
+    merged.keep_stops = true;
+  }
   if (!isCompareQuery(text)) merged.compare = false;
   if (!isCheapestWhenQuery(text)) merged.cheapest_when = false;
   if (oneWay) {

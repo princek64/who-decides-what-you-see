@@ -11,6 +11,8 @@ import {
   dateFromText,
   isShowAllQuery,
   isPickBestQuery,
+  isDropDirectQuery,
+  isDirectOnlyQuery,
   classifyOrigin,
   datesQuestionFor,
   firstMissingRequiredSlot,
@@ -345,7 +347,7 @@ export const useChat = () => {
     }
 
     const prose = buildProseAnswer(filteredResults, intent, {
-      keepStops: Boolean(slot.compare || slot.cheapest_when),
+      keepStops: Boolean(slot.compare || slot.cheapest_when || slot.keep_stops),
       skipPairLead: Boolean(slot.cheapest_when),
     });
     pushAssistant({
@@ -563,6 +565,9 @@ export const useChat = () => {
   const REFERENT_CUE = /\b(?:that|those|these|this|it|its|it's|them|they|the one|ones)\b/i;
 
   const isFollowUpDetail = (text: string, pool: Flight[]): boolean => {
+    // Search refinements that mention "stop" / "direct" must not be answered
+    // as attribute lookups on the flights already shown.
+    if (isDropDirectQuery(text) || isDirectOnlyQuery(text)) return false;
     const field = detectDetailField(text);
     if (!field || NEW_SEARCH_CUE.test(text)) return false;
     const unambiguous: DetailField[] = ['baggage', 'aircraft', 'flexibility', 'co2', 'seats', 'demand'];
@@ -724,7 +729,14 @@ export const useChat = () => {
       const wordingAgrees =
         wordField != null ||
         (Boolean(slot.detail_target) && resolveTargets(text, pool, slot.detail_target).length > 0);
-      if (pool.length > 0 && wordingAgrees && (modelField || slot.off_topic)) {
+      // "include the ones with a stop" mentions stops but is a search refinement.
+      if (
+        pool.length > 0 &&
+        wordingAgrees &&
+        (modelField || slot.off_topic) &&
+        !isDropDirectQuery(text) &&
+        !isDirectOnlyQuery(text)
+      ) {
         await handleDetailTurn(text, pool, modelField || wordField, slot);
         return;
       }

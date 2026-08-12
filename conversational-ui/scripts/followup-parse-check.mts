@@ -41,6 +41,26 @@ interface Case {
 
 const cases: Case[] = [
   {
+    name: '"include the ones with a stop" (prose offer wording) drops direct-only',
+    prev: prevDirect,
+    text: 'include the ones with a stop',
+    parsed: emptySlot(),
+    check: (s) =>
+      s.direct_only == null && s.keep_stops === true
+        ? null
+        : `direct_only=${String(s.direct_only)} keep_stops=${String(s.keep_stops)}`,
+  },
+  {
+    name: 'typo "incluse the one with a stop" still opens connecting options',
+    prev: prevOpen,
+    text: 'incluse the one with a stop',
+    parsed: emptySlot(),
+    check: (s) =>
+      s.keep_stops === true && s.destination === 'Amsterdam'
+        ? null
+        : `keep_stops=${String(s.keep_stops)} dest=${String(s.destination)}`,
+  },
+  {
     name: '"include flights with a stop" drops the direct-only constraint',
     prev: prevDirect,
     text: 'yes, include flights with a stop',
