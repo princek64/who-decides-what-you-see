@@ -16,6 +16,8 @@ import {
 } from '../lib/apiRetry';
 import { loadFlightData } from '../lib/flightData';
 import {
+  datesQuestionFor,
+  needsDatesClarification,
   resolveTurnIntent,
   shouldOmitGroqHistory,
   tryLocalIntent,
@@ -264,6 +266,23 @@ export const useGenChat = () => {
     }
   };
 
+  /** City set, dates empty → ask (same policy as conversational-ui). Does not
+   *  search; keeps the unresolved intent on the assistant turn for logging. */
+  const askForDates = (intent: GenIntent) => {
+    const text = datesQuestionFor(intent);
+    logAiResponse({ ...intent, layout_rendered: 'none', awaiting_dates: true });
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `ai-${Date.now()}`,
+        role: 'assistant',
+        text,
+        intent,
+        timestamp: Date.now(),
+      },
+    ]);
+  };
+
   // Filter + generative-layout pipeline for an already-resolved intent, then
   // land the assistant screen. Shared by fresh LLM queries (sendMessage) and
   // deterministic refinements (refineView) so both compose the SAME way.
@@ -273,8 +292,9 @@ export const useGenChat = () => {
   // in the history stack.
   const applyIntent = async (intent: IntentJSON & { layout?: string }, query: string) => {
     // Everything the caller answers without looking anything up (off-topic,
-    // too-broad, unknown city) has already returned by now. From here it is
-    // actually searching the dataset, so show that step before the screen lands.
+    // too-broad, unknown city, missing dates) has already returned by now.
+    // From here it is actually searching the dataset, so show that step before
+    // the screen lands.
     setLoadingPhase('searching');
     await sleep(SEARCH_STEP_MS);
 
@@ -392,8 +412,30 @@ export const useGenChat = () => {
     if (localIntent) {
       try {
         const resolved = resolveTurnIntent(previousIntent, localIntent, text);
-        logAiResponse({ ...resolved, local_intent: true, skipped_groq: true });
-        await applyIntent(resolved, text);
+        // Align with conversational-ui: never silently search-all when a city
+        // is set but the turn (or a mid-task drop) left dates empty.
+        if (needsDatesClarification(resolved)) {
+          logAiResponse({
+            ...resolved,
+            local_intent: true,
+            skipped_groq: true,
+            layout_rendered: 'none',
+            awaiting_dates: true,
+          });
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `ai-${Date.now()}`,
+              role: 'assistant',
+              text: datesQuestionFor(resolved),
+              intent: resolved,
+              timestamp: Date.now(),
+            },
+          ]);
+        } else {
+          logAiResponse({ ...resolved, local_intent: true, skipped_groq: true });
+          await applyIntent(resolved, text);
+        }
       } finally {
         setIsLoading(false);
         setLoadingPhase('thinking');
@@ -498,6 +540,14 @@ export const useGenChat = () => {
             timestamp: Date.now(),
           },
         ]);
+        setIsLoading(false);
+        return;
+      }
+
+      // City set, no dates → ask (do not search the whole remaining window).
+      // Same undated policy as conversational-ui; open explore has no city.
+      if (needsDatesClarification(intent)) {
+        askForDates(intent);
         setIsLoading(false);
         return;
       }

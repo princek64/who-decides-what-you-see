@@ -18,6 +18,30 @@ import {
 
 export type GenIntent = IntentJSON & { layout?: string };
 
+/**
+ * Destination named, no dates given — ask rather than silently searching the
+ * whole remaining dataset window. Mirrors conversational-ui's
+ * firstMissingRequiredSlot('dates') policy so a mid-task refinement that drops
+ * the date cannot diverge between interfaces (ask vs search-all).
+ *
+ * Open explore (no city / destinations|map with no dest) is exempt: undated
+ * budget/anywhere searches are intentional.
+ */
+export const needsDatesClarification = (intent: GenIntent): boolean => {
+  const hasDest = Boolean(intent.dest_city?.trim() || intent.dest_code?.trim());
+  if (!hasDest) return false;
+  const hasDates = Boolean(
+    intent.date?.trim() || intent.date_from?.trim() || intent.date_to?.trim()
+  );
+  return !hasDates;
+};
+
+/** Same wording as conversational-ui datesQuestionFor for one-way vs round-trip. */
+export const datesQuestionFor = (intent: GenIntent): string =>
+  intent.direction === 'both' || intent.weekend
+    ? 'Which dates? A single day shows flights both ways — or give an outbound and return date, like "30 August out, 3 September back."'
+    : 'Which dates?';
+
 const pad = (n: number): string => String(n).padStart(2, '0');
 
 const normCity = (c?: string | null): string | null => {
@@ -325,6 +349,8 @@ const studyAmsterdam = (text: string): GenIntent | null => {
   if (price == null && after == null) return null;
   if (!/\b(?:one[\s-]?way|flight|flights|fly|flying)\b/i.test(text)) return null;
   const day = dateFromText(text);
+  // Date optional in wording — when absent, leave date empty so useGenChat
+  // asks (needsDatesClarification) rather than searching the whole window.
   const intent: GenIntent = {
     dest_city: 'Amsterdam',
     direction: 'outbound',
