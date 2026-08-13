@@ -57,6 +57,11 @@ export const FlightCarousel: React.FC<FlightCarouselProps> = ({
               </Button>
             </div>
           )}
+          {!isExpanded && flights.length > visibleCarouselFlights.length && (
+            <p className="text-[11px] text-muted-foreground text-center font-mono tabular-nums">
+              Showing {visibleCarouselFlights.length} of {flights.length}
+            </p>
+          )}
         </>
       ) : (
         <>

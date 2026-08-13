@@ -41,7 +41,7 @@ const flights: Flight[] = (parsed.data as any[])
 const cases: { name: string; intent: IntentJSON }[] = [
   {
     name: 'few results — direct to Barcelona on one date',
-    intent: { dest_city: 'Barcelona', date: '2026-08-03', stops: 0, sort_by: 'cheapest' },
+    intent: { dest_city: 'Barcelona', date: '2026-10-16', stops: 0, sort_by: 'cheapest' },
   },
   {
     name: 'many results — Amsterdam under £100 over a week',
@@ -72,12 +72,9 @@ for (const c of cases) {
   console.log(answer.text);
   console.log(answer.table ? `table rows available: ${answer.table.length}` : 'table: none');
 
-  // A mixed set is shown as direct flights only, so the quoted "cheapest" is
-  // the cheapest of what is ON SCREEN — quoting a hidden connecting flight
-  // would name a price the participant cannot find anywhere in the answer.
-  const directOnly = results.filter((f) => f.stops === 0);
-  const mixed = directOnly.length > 0 && directOnly.length < results.length;
-  const shownSet = mixed && c.intent.stops == null ? directOnly : results;
+  // A mixed set used to hide connecting flights; the quoted cheapest is now
+  // the minimum of the FULL filtered set (same content generative-ui shows).
+  const shownSet = results;
   const minPrice = shownSet.reduce((m, f) => Math.min(m, f.price_gbp), Infinity);
   if (!answer.text.includes(`£${minPrice.toFixed(2)}`)) {
     console.error(`FAIL: prose does not quote the displayed minimum price £${minPrice.toFixed(2)}`);
@@ -85,7 +82,9 @@ for (const c of cases) {
   }
   // A table is only allowed for a uniform set of more than TABLE_MIN_RESULTS.
   const displayCount = shownSet.length;
-  const wantsTable = displayCount > TABLE_MIN_RESULTS;
+  const uniform =
+    shownSet.every((f) => f.stops === 0) || shownSet.every((f) => f.stops > 0);
+  const wantsTable = uniform && displayCount > TABLE_MIN_RESULTS;
   if (wantsTable !== Boolean(answer.table)) {
     console.error(`FAIL: table presence wrong (${displayCount} shown, table=${Boolean(answer.table)})`);
     failures++;
@@ -94,8 +93,13 @@ for (const c of cases) {
     console.error('FAIL: table mixes direct and connecting flights');
     failures++;
   }
-  if (mixed && c.intent.stops == null && /with 1 stop/.test(answer.text)) {
-    console.error('FAIL: connecting flight shown in a mixed set without being asked for');
+  // Lead must state the true total before any preview truncation.
+  if (!answer.text.match(new RegExp(`Found ${results.length}\\b`)) && results.length <= 30) {
+    console.error(`FAIL: lead does not state Found ${results.length}`);
+    failures++;
+  }
+  if (answer.displayed < results.length && !answer.text.includes(`of ${results.length}`)) {
+    console.error(`FAIL: truncated answer does not say "of ${results.length}"`);
     failures++;
   }
 

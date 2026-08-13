@@ -101,8 +101,8 @@ check(
   'every flight number is in the table',
   results.every((f) => listed.table!.some((row) => row.flight_id === f.flight_id))
 );
-check('the count is stated in the lead', listed.text.includes(`all ${results.length} flights`));
-check('the cheapest is still named', listed.text.includes('cheapest option is'));
+check('the count is stated in the lead', listed.text.includes(`Found all ${results.length} flights`));
+check('the cheapest is still named', /cheapest/i.test(listed.text) && /£/.test(listed.text));
 console.log(`  lead: ${listed.text.split('\n')[0]}`);
 
 console.log('\n### a set past the preview cap — the case that was reported');

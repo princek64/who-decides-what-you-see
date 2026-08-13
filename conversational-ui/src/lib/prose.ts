@@ -13,6 +13,7 @@ import {
 } from './returnGroups';
 import type { LegGroups } from './returnGroups';
 
+/** Kept for callers/tests that still import it; no longer gates lead wording. */
 export const LARGE_RESULT_THRESHOLD = 30;
 
 export const TABLE_MIN_RESULTS = 4;
@@ -57,6 +58,7 @@ export interface ProseAnswer {
 }
 
 export interface ProseOptions {
+  /** @deprecated No longer hides connecting flights — kept so call sites compile. */
   keepStops?: boolean;
   /** Explicit compare turn — never collapse to directs-only in the answer. */
   compare?: boolean;
@@ -195,8 +197,7 @@ const cheapestLine = (f: Flight): ProseNode[] => [
 
 const buildFollowUpQuestion = (
   results: Flight[],
-  intent: IntentJSON,
-  hidStops: boolean
+  intent: IntentJSON
 ): string | null => {
   let minPrice = Infinity;
   let maxPrice = -Infinity;
@@ -221,19 +222,15 @@ const buildFollowUpQuestion = (
   );
   const offers: string[] = [];
 
-  if (hidStops) offers.push('include the ones with a stop');
-
   if (results.length <= 2) {
-
     if (intent.stops === 0) offers.push('include flights with a stop');
     if (intent.max_price) offers.push('lift the price cap');
     offers.push(singleDay ? 'check the days either side' : 'widen the dates');
   } else {
-    if (!hidStops && intent.stops == null && mixedStops) {
+    if (intent.stops == null && mixedStops) {
       offers.push('narrow it to direct flights only');
     }
     if (intent.max_price == null && maxPrice > minPrice * 1.3) {
-
       const mid = (minPrice + maxPrice) / 2;
       const step = mid < 100 ? 10 : mid < 300 ? 25 : 50;
       const cap = Math.round(mid / step) * step;
@@ -407,8 +404,8 @@ const buildShowAllAnswer = (results: Flight[], intent: IntentJSON): ProseAnswer 
   const withDate = new Set(results.map((f) => f.date)).size > 1;
 
   const lead = truncated
-    ? `Here are ${plural(results.length, 'flight')}${constraints} — showing the first ${visible.length}, sorted by ${intent.sort_by || 'cheapest'} first:`
-    : `Here ${results.length === 1 ? 'is' : 'are'} all ${plural(results.length, 'flight')}${constraints}, sorted by ${intent.sort_by || 'cheapest'} first:`;
+    ? `Found ${plural(results.length, 'flight')}${constraints} — showing the first ${visible.length} of ${results.length}, sorted by ${intent.sort_by || 'cheapest'} first:`
+    : `Found all ${plural(results.length, 'flight')}${constraints}, sorted by ${intent.sort_by || 'cheapest'} first:`;
 
   const blocks: ProseBlock[] = [{ kind: 'paragraph', nodes: [{ type: 'text', text: lead }] }];
   const closing: ProseBlock[] = [{ kind: 'paragraph', nodes: cheapestLine(cheapest) }];
@@ -450,16 +447,14 @@ export const buildProseAnswer = (
 
   if (opts.showAll && results.length > 0) return buildShowAllAnswer(results, intent);
 
-  const directs = results.filter((f) => f.stops === 0);
-  const mixed = directs.length > 0 && directs.length < results.length;
-  // Only hide stops when the user has not pinned the stop count themselves,
-  // and never on an explicit compare (must show both sides on first answer).
-  const hidStops =
-    mixed && intent.stops == null && !opts.keepStops && !opts.compare;
-  const shown = hidStops ? directs : results;
+  // Show the full filtered set — same content generative-ui gets. Presentation
+  // may still preview TABLE_PREVIEW_ROWS; connecting flights are no longer
+  // silently dropped when the set is mixed. (opts.keepStops / opts.compare are
+  // retained for call-site compatibility; they no longer gate this filter.)
+  const shown = results;
 
   const count = shown.length;
-  const stopWord = intent.stops === 0 || hidStops ? 'direct ' : intent.stops === 1 ? '1-stop ' : '';
+  const stopWord = intent.stops === 0 ? 'direct ' : intent.stops === 1 ? '1-stop ' : '';
   const constraints = describeConstraints(intent);
   const dates = new Set(shown.map((f) => f.date));
   const withDate = dates.size > 1;
@@ -468,17 +463,12 @@ export const buildProseAnswer = (
   const withDest = isBroad || new Set(shown.map((f) => f.dest_code)).size > 1;
 
   const cheapest = cheapestBy(shown) as Flight;
-  const found =
-    results.length > LARGE_RESULT_THRESHOLD
-      ? hidStops
-        ? `${isBroad ? 'You could get to plenty of places' : 'There are plenty of options'}${constraints}, and most are direct`
-        : `${isBroad ? 'You could get to plenty of places' : `There are lots of ${stopWord}options`}${constraints}`
-      : hidStops
-        ? `Of the ${plural(results.length, 'flight')}${constraints}, ${count} ${count === 1 ? 'is' : 'are'} direct`
-        : `I found ${plural(count, `${stopWord}flight`)}${constraints}`;
+  // Always name the true total (parity with generative "Found N …"), even when
+  // the list below is truncated to a preview.
+  const found = `Found ${plural(count, `${stopWord}flight`)}${constraints}`;
   const blocks: ProseBlock[] = [];
 
-  const question = buildFollowUpQuestion(shown, intent, hidStops);
+  const question = buildFollowUpQuestion(shown, intent);
   const askNodes: ProseNode[] = question ? [{ type: 'text', text: ` ${question}` }] : [];
 
   if (count === 1) {
@@ -506,7 +496,7 @@ export const buildProseAnswer = (
   if (!(uniform && count > TABLE_MIN_RESULTS)) {
     const lead =
       count > visible
-        ? `${found}. Here are the first ${visible}, sorted by ${intent.sort_by || 'cheapest'} first:`
+        ? `${found}. Here are the first ${visible} of ${count}, sorted by ${intent.sort_by || 'cheapest'} first:`
         : `${found}:`;
     blocks.push({ kind: 'paragraph', nodes: [{ type: 'text', text: lead }] });
     blocks.push({
@@ -539,7 +529,10 @@ export const buildProseAnswer = (
       { type: 'strong', text: money(dearest.price_gbp) },
       {
         type: 'text',
-        text: `. Here ${count > visible ? `are the first ${visible}` : 'they are'}, sorted by ${sortLabel} first:`,
+        text:
+          count > visible
+            ? `. Here are the first ${visible} of ${count}, sorted by ${sortLabel} first:`
+            : `. Here they are, sorted by ${sortLabel} first:`,
       },
     ],
   });
