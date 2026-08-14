@@ -289,6 +289,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
             keepStops={Boolean(
               message.slot?.compare || message.slot?.cheapest_when || message.slot?.keep_stops
             )}
+            compare={Boolean(message.slot?.compare)}
             showAll={Boolean(message.showAll)}
           />
         </>
