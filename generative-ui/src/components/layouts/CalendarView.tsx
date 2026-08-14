@@ -6,6 +6,24 @@ import { formatFlightDate } from '../../lib/utils';
 const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+/** Return date after an outbound day: +2 nights, or next Sun/Mon for weekend trips. */
+const suggestReturnDate = (outboundIso: string, weekend?: boolean): string => {
+  const d = new Date(`${outboundIso}T00:00:00`);
+  if (weekend) {
+    // Aim for Sunday (0) or Monday (1) after outbound Fri/Sat.
+    for (let add = 1; add <= 4; add++) {
+      const t = new Date(d);
+      t.setDate(d.getDate() + add);
+      const dow = t.getDay();
+      if (dow === 0 || dow === 1) {
+        return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+      }
+    }
+  }
+  d.setDate(d.getDate() + 2);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 // Static month grid(s) of cheapest fares per day, tercile-tinted like the
 // dashboard's price calendar; weekend days carry a dot marker.
 export const CalendarView: React.FC<{
@@ -83,13 +101,36 @@ export const CalendarView: React.FC<{
                       key={key}
                       type="button"
                       disabled={!flight || !onRefine}
-                      onClick={() =>
-                        onRefine?.(
+                      onClick={() => {
+                        if (!flight || !onRefine) return;
+                        const roundTrip = intent.direction === 'both' || intent.weekend;
+                        if (roundTrip) {
+                          const ret = suggestReturnDate(key, intent.weekend);
+                          onRefine(
+                            {
+                              date: undefined,
+                              date_from: key,
+                              date_to: ret,
+                              direction: 'both',
+                              layout: 'itinerary',
+                              weekend: intent.weekend,
+                            },
+                            `Round trip${dest ? ` to ${dest}` : ''}: out ${formatFlightDate(key)}, back ${formatFlightDate(ret)}`
+                          );
+                          return;
+                        }
+                        onRefine(
                           { date: key, date_from: undefined, date_to: undefined, layout: 'grid' },
                           `Flights${dest ? ` to ${dest}` : ''} on ${formatFlightDate(key)}`
-                        )
+                        );
+                      }}
+                      title={
+                        flight
+                          ? intent.direction === 'both' || intent.weekend
+                            ? `From £${flight.price_gbp.toFixed(2)} — build a round trip from this day`
+                            : `From £${flight.price_gbp.toFixed(2)} — click to search this day`
+                          : undefined
                       }
-                      title={flight ? `From £${flight.price_gbp.toFixed(2)} — click to search this day` : undefined}
                       className={`h-10 rounded-md flex flex-col items-center justify-center text-[10px] transition-colors ${
                         isCheapestWeekend
                           ? 'bg-foreground text-background'

@@ -123,6 +123,14 @@ export const GenScreen: React.FC<GenScreenProps> = ({
   const originLabel = intent.origin_code?.trim()
     ? `${getCityName(intent.origin_code.trim())} (${intent.origin_code.trim().toUpperCase()})`
     : 'all London airports';
+  const resultCount = message.flights?.length ?? 0;
+  const regionBadge =
+    intent.dest_region === 'eastern_europe' ? 'Eastern Europe only' : null;
+  const weekendBadge = intent.weekend ? 'Weekend departures (Fri–Sun)' : null;
+  const countBadge =
+    hasGenContent && layout !== 'alert' && resultCount > 0
+      ? `${resultCount} matching flight${resultCount === 1 ? '' : 's'}`
+      : null;
 
   return (
     <div className="w-full px-4 md:px-8 py-6">
@@ -162,7 +170,7 @@ export const GenScreen: React.FC<GenScreenProps> = ({
             {message.text && (
               <p className="mt-2 text-sm md:text-base text-muted-foreground leading-relaxed">{message.text}</p>
             )}
-            {(showOriginAssumption || showDateAssumption) && (
+            {(showOriginAssumption || showDateAssumption || regionBadge || weekendBadge || countBadge) && (
               <div className="mt-3 flex flex-wrap gap-2">
                 {showOriginAssumption && (
                   <span
@@ -180,6 +188,22 @@ export const GenScreen: React.FC<GenScreenProps> = ({
                   >
                     <Calendar className="w-3 h-3" />
                     Assumed dates: any, {assumedDatesLabel()}
+                  </span>
+                )}
+                {regionBadge && (
+                  <span className="inline-flex items-center gap-1.5 bg-muted border border-border rounded-full px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                    {regionBadge}
+                  </span>
+                )}
+                {weekendBadge && (
+                  <span className="inline-flex items-center gap-1.5 bg-muted border border-border rounded-full px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                    {weekendBadge}
+                  </span>
+                )}
+                {countBadge && (
+                  <span className="inline-flex items-center gap-1.5 bg-muted border border-border rounded-full px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                    <Plane className="w-3 h-3" />
+                    {countBadge}
                   </span>
                 )}
               </div>

@@ -23,11 +23,17 @@ export const AlertView: React.FC<{
           <SearchX className="w-4 h-4 text-accent-red" />
         </span>
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-foreground">Nothing matched that search exactly</div>
+          <div className="text-sm font-semibold text-foreground">
+            {overBudget.length > 0 || nearbyDates.length > 0
+              ? 'No exact match — closest options:'
+              : 'Nothing matched that search'}
+          </div>
           <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
             {intent.max_price != null && `Your £${intent.max_price} limit is the tightest constraint. `}
             {intent.date && `Only ${formatFlightDate(intent.date)} was searched. `}
-            Here's what comes closest:
+            {overBudget.length > 0 || nearbyDates.length > 0
+              ? 'Here is what comes closest:'
+              : 'Try a different date, budget, or destination.'}
           </div>
         </div>
       </div>

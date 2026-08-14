@@ -27,11 +27,27 @@ interface ChatBubbleProps {
 const AssumptionLine: React.FC<{
   intent?: IntentJSON;
   onPickOrigin?: (originCode: string) => void;
-}> = ({ intent, onPickOrigin }) => {
+  /** When the answer shows a preview of a larger set. */
+  shownOfTotal?: { shown: number; total: number } | null;
+  /** Compare / keep-stops: both stop types are in the answer. */
+  showingStops?: boolean;
+  /** Directs-only preview while connecting flights exist. */
+  hidStops?: boolean;
+  /** Eastern Europe region filter applied. */
+  regionLabel?: string | null;
+}> = ({ intent, onPickOrigin, shownOfTotal, showingStops, hidStops, regionLabel }) => {
   const [open, setOpen] = useState(false);
   const originCode = intent?.origin_code?.trim();
   const originLabel = originCode ? londonAirportLabel(originCode) : 'all London airports';
   const cabinLabel = intent?.cabin_class?.trim() || 'Economy';
+
+  const extras: string[] = [];
+  if (regionLabel) extras.push(regionLabel);
+  if (showingStops) extras.push('showing direct and 1-stop');
+  else if (hidStops) extras.push('directs only — ask to include stops');
+  if (shownOfTotal && shownOfTotal.total > shownOfTotal.shown) {
+    extras.push(`showing ${shownOfTotal.shown} of ${shownOfTotal.total}`);
+  }
 
   return (
     <div className="relative flex items-center flex-wrap gap-1 mb-1.5 text-[11px] text-muted-foreground">
@@ -91,6 +107,11 @@ const AssumptionLine: React.FC<{
             </button>
           </div>
         </>
+      )}
+      {extras.length > 0 && (
+        <span className="w-full basis-full mt-0.5 text-[10px] text-muted-foreground/90">
+          {extras.join(' · ')}
+        </span>
       )}
     </div>
   );
@@ -231,7 +252,32 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
       {hasResults ? (
         <>
           {/* "What I understood" note, stated before the answer */}
-          <AssumptionLine intent={message.intent} onPickOrigin={onPickOrigin} />
+          <AssumptionLine
+            intent={message.intent}
+            onPickOrigin={onPickOrigin}
+            shownOfTotal={
+              message.flights && message.flights.length > 6 && !message.showAll
+                ? { shown: 6, total: message.flights.length }
+                : message.showAll && message.flights
+                  ? { shown: message.flights.length, total: message.flights.length }
+                  : null
+            }
+            showingStops={Boolean(message.slot?.compare || message.slot?.keep_stops)}
+            hidStops={Boolean(
+              !message.slot?.compare &&
+                !message.slot?.keep_stops &&
+                !message.slot?.cheapest_when &&
+                message.flights &&
+                message.flights.some((f) => f.stops === 0) &&
+                message.flights.some((f) => f.stops > 0) &&
+                message.intent?.stops == null
+            )}
+            regionLabel={
+              message.intent?.dest_region === 'eastern_europe'
+                ? 'Eastern Europe only'
+                : null
+            }
+          />
           {/* Comparison / cheapest-day insight, stated before the answer.
               Verdict + why + option bullets (see insights.ts). */}
           {message.preface && (

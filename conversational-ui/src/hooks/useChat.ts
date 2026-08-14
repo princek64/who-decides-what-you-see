@@ -362,6 +362,7 @@ export const useChat = () => {
 
     const prose = buildProseAnswer(filteredResults, intent, {
       keepStops: Boolean(slot.compare || slot.cheapest_when || slot.keep_stops),
+      compare: Boolean(slot.compare),
       skipPairLead: Boolean(slot.cheapest_when),
     });
     pushAssistant({

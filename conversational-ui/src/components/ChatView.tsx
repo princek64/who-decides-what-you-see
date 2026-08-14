@@ -11,9 +11,10 @@ import { buildSearchingStatus } from '../lib/searchingStatus';
 // Stable module-level reference — an inline array literal as the hook's
 // `examples` prop would recreate on every render and restart the animation.
 const SEARCH_EXAMPLES = [
-  'Cheapest flight to Barcelona',
-  'Weekend trip to Amsterdam under £150',
-  'Compare direct vs connecting flights',
+  'Cheapest direct one-way to Barcelona on 16 October 2026',
+  'Compare direct vs one-stop to Lisbon on 15 November 2026',
+  '£150 and a free weekend — where could I go in Eastern Europe?',
+  'Cheapest weekend return to Paris in the next three months',
 ] as const;
 
 export const ChatView: React.FC = () => {

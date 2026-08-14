@@ -83,7 +83,7 @@ export const isCheapestWhenQuery = (text: string): boolean =>
   /\bwhen(?:'s| is)?\b.*\bcheapest\b/i.test(text);
 
 export const isRoundTripQuery = (text: string): boolean =>
-  /\bround[- ]trips?\b/i.test(text) ||
+  /\bround[\s-]?trips?\b/i.test(text) ||
   /\breturn\s+trips?\b/i.test(text) ||
   /\breturn\s+flights?\b/i.test(text) ||
   /\bthere\s+and\s+back\b/i.test(text) ||
@@ -134,11 +134,11 @@ export const flexibleWindowFromText = (
   text: string
 ): { date_from: string; date_to: string } | null => {
   const three =
-    /\b(?:in|over|for|during)\s+the\s+next\s+(?:three|3)\s+months?\b/i.exec(text) ||
+    /\b(?:in|over|for|during|within)\s+the\s+next\s+(?:three|3)\s+months?\b/i.exec(text) ||
     /\bnext\s+(?:three|3)\s+months?\b/i.exec(text);
   const one =
     !three &&
-    (/\b(?:in|over|for|during)\s+the\s+next\s+months?\b/i.exec(text) ||
+    (/\b(?:in|over|for|during|within)\s+the\s+next\s+months?\b/i.exec(text) ||
       /\bnext\s+months?\b/i.exec(text));
   if (!three && !one) return null;
   const from = getSearchAnchor();
@@ -225,28 +225,28 @@ export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent
 
   if (/\bweekend\b/i.test(text)) next.weekend = true;
 
-  if (isCompareQuery(text)) {
-    delete next.stops;
-    next.layout = 'comparison';
-  } else if (isDirectOnlyQuery(text)) {
-    next.stops = 0;
-  }
-
-  if (isCheapestWhenQuery(text) && (!next.layout || next.layout === 'grid')) {
-    next.layout = 'calendar';
-  }
-
   if (isOneWayQuery(text)) {
     next.direction = 'outbound';
   } else if (isReturnOnlyQuery(text)) {
     next.direction = 'return';
   } else if (isRoundTripQuery(text)) {
     next.direction = 'both';
-    // Round-trip wording without a "cheapest day/weekend in a window" frame
-    // should show a paired itinerary, not a one-way day calendar.
-    if (!isCheapestWhenQuery(text) && !isCompareQuery(text)) {
+    // Return-trip users need a paired itinerary. A price calendar of outbound
+    // days (with same-day return lock) caused abandonments in live sessions.
+    // Scripted "cheapest weekend return" study tasks still force calendar via
+    // studyParisWeekend; free round-trip wording goes to itinerary.
+    if (!isCompareQuery(text)) {
       next.layout = 'itinerary';
     }
+  } else if (isCheapestWhenQuery(text) && (!next.layout || next.layout === 'grid')) {
+    next.layout = 'calendar';
+  }
+
+  if (isCompareQuery(text)) {
+    delete next.stops;
+    next.layout = 'comparison';
+  } else if (isDirectOnlyQuery(text)) {
+    next.stops = 0;
   }
 
   if (!next.sort_by) next.sort_by = 'cheapest';
@@ -323,6 +323,32 @@ export const resolveTurnIntent = (
       text
     );
     return next;
+  }
+
+  // "restrict / only / narrow" without a new city — compose onto the prior
+  // search instead of starting a blank slot-fill.
+  const scopeRefine =
+    prev &&
+    !destinationFromText(text) &&
+    (/\brestrict\b|\bnarrow\b|\bonly\s+show\b|\bfilter\s+to\b|\blimit\s+to\b/i.test(text) ||
+      isEasternEuropeQuery(text));
+  if (scopeRefine && prev && !isOpenExploreQuery(text) && !isLiftRegionQuery(text)) {
+    const eastern = isEasternEuropeQuery(text);
+    return applyIntentBackstops(
+      {
+        ...prev,
+        ...next,
+        dest_city: prev.dest_city,
+        dest_code: prev.dest_code,
+        date: prev.date ?? next.date,
+        date_from: prev.date_from ?? next.date_from,
+        date_to: prev.date_to ?? next.date_to,
+        dest_region: eastern ? 'eastern_europe' : next.dest_region ?? prev.dest_region,
+        layout: next.layout ?? prev.layout,
+        off_topic: false,
+      },
+      text
+    );
   }
 
   if (
@@ -515,7 +541,12 @@ export const tryLocalIntent = (text: string, hasPrevious = false): GenIntent | n
   if (!t || looksOffTopic(t)) return null;
 
   const study = matchStudyTaskIntent(t);
-  if (study) return applyIntentBackstops(study, t);
+  if (study) {
+    const next = applyIntentBackstops(study, t);
+    // Study-task layouts are authoritative (e.g. T4 cheapest-weekend calendar).
+    if (study.layout) next.layout = study.layout;
+    return next;
+  }
 
   if (
     isOpenExploreQuery(t) ||

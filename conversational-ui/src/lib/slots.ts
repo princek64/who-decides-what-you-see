@@ -221,7 +221,7 @@ export const isRoundTripQuery = (text: string): boolean =>
   // to Paris" down the one-way path, which is how a round-trip request came
   // back with outbound flights only.
   /\breturn\s+(?:flights?|trips?|tickets?|fares?|journeys?)\b/i.test(text) ||
-  /\bround[- ]trip\b/i.test(text) ||
+  /\bround[\s-]?trips?\b/i.test(text) ||
   /\bthere\s+and\s+back\b/i.test(text) ||
   /\bout\s+and\s+back\b/i.test(text) ||
   /\bboth\s+ways\b/i.test(text) ||
@@ -433,11 +433,11 @@ export const flexibleWindowFromText = (
   text: string
 ): { date_from: string; date_to: string } | null => {
   const three =
-    /\b(?:in|over|for|during)\s+the\s+next\s+(?:three|3)\s+months?\b/i.exec(text) ||
+    /\b(?:in|over|for|during|within)\s+the\s+next\s+(?:three|3)\s+months?\b/i.exec(text) ||
     /\bnext\s+(?:three|3)\s+months?\b/i.exec(text);
   const one =
     !three &&
-    (/\b(?:in|over|for|during)\s+the\s+next\s+months?\b/i.exec(text) ||
+    (/\b(?:in|over|for|during|within)\s+the\s+next\s+months?\b/i.exec(text) ||
       /\bnext\s+months?\b/i.exec(text));
   if (!three && !one) return null;
   const from = getSearchAnchor();
@@ -530,11 +530,11 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
   }
   if (isCompareQuery(text)) {
     slot.compare = true;
-    // "compare a direct flight with one that has a stop" contains the word
-    // "direct", so a widened direct-only detector would otherwise collapse the
-    // comparison to directs only. The prompt already says comparisons leave
-    // direct_only null — enforce that here when the model gets it wrong.
+    // Compare must show both stop types on the FIRST answer. "direct" appears
+    // in compare wording, so without this the prose hidStops path collapses to
+    // directs-only until the user asks again (live-session failure).
     slot.direct_only = null;
+    slot.keep_stops = true;
   }
   if (isCheapestWhenQuery(text)) slot.cheapest_when = true;
   if (/\bweekend\b/i.test(text)) slot.weekend = true;
@@ -657,7 +657,16 @@ const CARRYABLE_SLOTS = [
 ] as const;
 
 const MODIFIER_CUE =
-  /\b(?:instead|same date|same day|same dates|same time|same budget|same price|same cap|that date|those dates|make it|change (?:it|that) to|what about|how about|and also|as well|rather than|but)\b/i;
+  /\b(?:instead|same date|same day|same dates|same time|same budget|same price|same cap|that date|those dates|make it|change (?:it|that) to|what about|how about|and also|as well|rather than|but|restrict|narrow|only show|only\s+(?:the\s+)?(?:ones?|flights?)|filter(?:\s+to)?|limit(?:\s+to)?)\b/i;
+
+/** Scope refine of the current results without naming a new city. */
+export const isScopeRefineQuery = (text: string): boolean =>
+  /\brestrict\b/i.test(text) ||
+  /\bnarrow\b/i.test(text) ||
+  /\bonly\s+(?:show|the|direct|weekend|flights?)\b/i.test(text) ||
+  /\bfilter\s+to\b/i.test(text) ||
+  /\blimit\s+to\b/i.test(text) ||
+  isEasternEuropeQuery(text);
 
 // Explicit "throw away the current search" phrases. Live sessions used
 // "Forget everything" which the old pattern missed (it only matched
@@ -801,7 +810,7 @@ export const resolveTurnSlot = (
 
   const hasDestination = hasValue(next.destination);
   const hasDates = hasValue(next.date_from) || hasValue(next.date_to);
-  const isModifier = refinement || MODIFIER_CUE.test(text);
+  const isModifier = refinement || MODIFIER_CUE.test(text) || isScopeRefineQuery(text);
 
   const prevDest = hasValue(prev.destination) ? String(prev.destination).trim().toLowerCase() : null;
   const nextDest = hasValue(next.destination) ? String(next.destination).trim().toLowerCase() : null;

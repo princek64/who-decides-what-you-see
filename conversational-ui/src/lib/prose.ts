@@ -58,6 +58,8 @@ export interface ProseAnswer {
 
 export interface ProseOptions {
   keepStops?: boolean;
+  /** Explicit compare turn — never collapse to directs-only in the answer. */
+  compare?: boolean;
   /** The user asked to see everything ("show me all options"). Lays the whole
    *  result set out as a table instead of summarising a preview of it. */
   showAll?: boolean;
@@ -450,8 +452,10 @@ export const buildProseAnswer = (
 
   const directs = results.filter((f) => f.stops === 0);
   const mixed = directs.length > 0 && directs.length < results.length;
-  // Only hide stops when the user has not pinned the stop count themselves.
-  const hidStops = mixed && intent.stops == null && !opts.keepStops;
+  // Only hide stops when the user has not pinned the stop count themselves,
+  // and never on an explicit compare (must show both sides on first answer).
+  const hidStops =
+    mixed && intent.stops == null && !opts.keepStops && !opts.compare;
   const shown = hidStops ? directs : results;
 
   const count = shown.length;
