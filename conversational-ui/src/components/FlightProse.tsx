@@ -10,6 +10,8 @@ interface FlightProseProps {
   intent: IntentJSON;
   /** Comparison / cheapest-day answers keep connecting flights on screen. */
   keepStops?: boolean;
+  /** Explicit compare — never collapse to directs-only. */
+  compare?: boolean;
   /** "Show me all options" — lay the whole result set out instead of a preview. */
   showAll?: boolean;
 }
@@ -18,11 +20,12 @@ export const FlightProse: React.FC<FlightProseProps> = ({
   flights,
   intent,
   keepStops,
+  compare,
   showAll,
 }) => {
   // The builder decides what is on screen (direct-only display rule, bullets vs
   // table, how many rows).
-  const answer = buildProseAnswer(flights, intent, { keepStops, showAll });
+  const answer = buildProseAnswer(flights, intent, { keepStops, compare, showAll });
   const rows = answer.table ?? [];
 
   const cell = 'py-2 pr-5 whitespace-nowrap align-middle';
