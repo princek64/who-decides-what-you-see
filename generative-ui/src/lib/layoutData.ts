@@ -1,6 +1,6 @@
 import type { Flight, IntentJSON } from '../hooks/useFlightFilter';
 import { filterAndSortFlights, isRoundTripItinerary } from '../hooks/useFlightFilter';
-import { getCityName, getCityCountry } from './airportMap';
+import { getCityName, getCityCountry, LONDON_AIRPORT_CODES } from './airportMap';
 
 // ─── Pure data adapters for the generative layouts ───
 // Everything here derives view-models from the already-filtered results (or,
@@ -27,10 +27,15 @@ export interface DestinationSummary {
  *  has a near-uniform ~£21 price floor on every route: over any reasonable
  *  window each city has SOME £21 fare, so a per-destination minimum is real but
  *  useless for comparison (every card reads "from £21"). The median separates
- *  genuinely cheap destinations from pricier ones. */
+ *  genuinely cheap destinations from pricier ones.
+ *
+ *  London airport codes are never destination cards: return legs land in London,
+ *  and grouping by dest_code would otherwise surface Heathrow/Gatwick/… as if
+ *  they were places you could fly *to* from London. */
 export const summarizeDestinations = (flights: Flight[]): DestinationSummary[] => {
   const priced: Record<string, { prices: number[]; minPrice: number; minCo2: number }> = {};
   for (const f of flights) {
+    if (LONDON_AIRPORT_CODES.has(f.dest_code)) continue;
     const cur = (priced[f.dest_code] ||= { prices: [], minPrice: f.price_gbp, minCo2: f.co2_kg });
     cur.prices.push(f.price_gbp);
     if (f.price_gbp < cur.minPrice) cur.minPrice = f.price_gbp;

@@ -398,7 +398,9 @@ export const maxPriceFromText = (text: string): number | null => {
 export const isBudgetExploreQuery = (text: string): boolean =>
   !destinationFromText(text) &&
   maxPriceFromText(text) != null &&
-  (/\bweekend\b/i.test(text) || /\banywhere\b|\bsomewhere\b|\bwhere\b/i.test(text)) &&
+  (/\bweekend\b/i.test(text) ||
+    /\banywhere\b|\bsomewhere\b|\bwhere\b/i.test(text) ||
+    /\bbudget\b/i.test(text)) &&
   /\b(?:fly|flying|flight|flights|options?|go|travel|trip)\b/i.test(text);
 
 /** Anywhere wording OR an open budget/weekend explore with no city named. */

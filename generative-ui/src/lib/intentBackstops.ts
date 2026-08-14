@@ -109,7 +109,9 @@ export const maxPriceFromText = (text: string): number | null => {
 export const isBudgetExploreQuery = (text: string): boolean =>
   !destinationFromText(text) &&
   maxPriceFromText(text) != null &&
-  (/\bweekend\b/i.test(text) || /\banywhere\b|\bsomewhere\b|\bwhere\b/i.test(text)) &&
+  (/\bweekend\b/i.test(text) ||
+    /\banywhere\b|\bsomewhere\b|\bwhere\b/i.test(text) ||
+    /\bbudget\b/i.test(text)) &&
   /\b(?:fly|flying|flight|flights|options?|go|travel|trip)\b/i.test(text);
 
 export const isOpenExploreQuery = (text: string): boolean =>
@@ -254,6 +256,16 @@ export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent
   }
 
   if (!next.sort_by) next.sort_by = 'cheapest';
+
+  // Destination / map / budget cards group by dest_code. Return legs land in
+  // London, so direction "both"/"return" would surface Heathrow/Gatwick cards
+  // as if they were places to fly to. Force outbound when the layout is still
+  // exploratory and no city is named (runs after round-trip→itinerary).
+  const exploratoryLayout =
+    next.layout === 'destinations' || next.layout === 'map' || next.layout === 'budget';
+  if (exploratoryLayout && !next.dest_city && !next.dest_code) {
+    next.direction = 'outbound';
+  }
 
   return next;
 };

@@ -7,6 +7,7 @@
 import { dateFromText } from '../src/lib/returnLeg';
 import {
   RESET_CUE,
+  applyIntentBackstops,
   flexibleWindowFromText,
   isAnywhereQuery,
   isEasternEuropeQuery,
@@ -117,17 +118,42 @@ console.log('\n### open dest follow-ups after budget ask');
   check('cold budget is not open explore', !isOpenExploreQuery(cold));
   check('any london airports is not any destinations', !isAnywhereQuery(cold));
 
+  const budgetAsk = 'show flights under 150 pounds budget';
+  check('budget wording is open explore', isOpenExploreQuery(budgetAsk));
+  const budgetLocal = tryLocalIntent(budgetAsk, false);
+  check('budget local intent', budgetLocal != null);
+  check('budget local outbound', budgetLocal?.direction === 'outbound');
+  check(
+    'budget local explore layout',
+    budgetLocal?.layout === 'destinations' || budgetLocal?.layout === 'budget'
+  );
+  check('budget local £150', budgetLocal?.max_price === 150);
+
   const prev: GenIntent = { max_price: 150, sort_by: 'cheapest' };
-  for (const follow of ['any destinations', 'suggest destinations', 'within europe']) {
+  for (const follow of [
+    'any destinations',
+    'suggest destinations',
+    'within europe',
+    'choose any destination in europe',
+  ]) {
     check(`detect open: ${follow}`, isOpenExploreQuery(follow) || isLiftRegionQuery(follow));
     const local = tryLocalIntent(follow, true);
     check(`local intent: ${follow}`, local != null);
     const merged = resolveTurnIntent(prev, local ?? {}, follow);
     check(`destinations layout: ${follow}`, merged.layout === 'destinations');
+    check(`outbound: ${follow}`, merged.direction === 'outbound');
     check(`keeps £150: ${follow}`, merged.max_price === 150, String(merged.max_price));
     check(`no city forced: ${follow}`, !merged.dest_city);
   }
   check('Barcelona in europe is not a lift', !isLiftRegionQuery('flights to Barcelona in europe'));
+
+  // Groq often invents direction=both for budget explores; cards must still
+  // exclude London airports and backstops must force outbound.
+  const bothBackstop = applyIntentBackstops(
+    { max_price: 150, layout: 'destinations', direction: 'both', sort_by: 'cheapest' },
+    'show flights under 150 pounds budget'
+  );
+  check('backstop forces outbound on destinations', bothBackstop.direction === 'outbound');
 }
 
 if (failures > 0) {

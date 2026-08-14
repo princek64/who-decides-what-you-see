@@ -123,8 +123,13 @@ console.log('\n### open dest follow-ups after budget ask');
 {
   // Cold budget + London origin still asks for a destination once…
   const cold = 'cheapest flights under 150 pounds from any london airports';
-  check('cold budget is not open explore', !isOpenExploreQuery(cold));
+  check('cold london-origin budget is not open explore', !isOpenExploreQuery(cold));
   check('any london airports is not any destinations', !isAnywhereQuery(cold));
+
+  check(
+    'show flights under 150 pounds budget is open explore',
+    isOpenExploreQuery('show flights under 150 pounds budget')
+  );
 
   const awaiting = blank({
     destination: null,
@@ -135,7 +140,12 @@ console.log('\n### open dest follow-ups after budget ask');
   check('awaiting dest asks destination', firstMissingRequiredSlot(awaiting) === 'destination');
 
   // …but declining to name a city must run an anywhere search, keeping £150.
-  for (const follow of ['any destinations', 'suggest destinations', 'within europe']) {
+  for (const follow of [
+    'any destinations',
+    'suggest destinations',
+    'within europe',
+    'choose any destination in europe',
+  ]) {
     check(`detect open: ${follow}`, isOpenExploreQuery(follow) || isLiftRegionQuery(follow));
     const local = tryLocalSlot(follow, true);
     check(`local slot: ${follow}`, local != null && local.anywhere === true);

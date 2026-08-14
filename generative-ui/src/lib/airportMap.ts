@@ -217,11 +217,14 @@ export function getCityName(code: string): string {
   return AIRPORT_TO_CITY[code] || code;
 }
 
+/** London origin airports — never destination cards in this dataset. */
+export const LONDON_AIRPORT_CODES = new Set(['LHR', 'LGW', 'STN', 'LTN', 'LCY', 'SEN']);
+
 // Get all unique destination city names (excluding London airports) for autocomplete suggestions
 export const DESTINATION_CITIES = Array.from(
   new Set(
     Object.entries(AIRPORT_TO_CITY)
-      .filter(([code]) => !["LHR", "LGW", "STN", "LTN", "LCY", "SEN"].includes(code))
+      .filter(([code]) => !LONDON_AIRPORT_CODES.has(code))
       .map(([, city]) => city)
   )
 ).sort();
