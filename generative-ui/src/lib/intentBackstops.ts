@@ -133,13 +133,18 @@ export const departureAfterFromText = (text: string): string | null => {
 export const flexibleWindowFromText = (
   text: string
 ): { date_from: string; date_to: string } | null => {
-  const monthsMatch =
+  const three =
     /\b(?:in|over|for|during)\s+the\s+next\s+(?:three|3)\s+months?\b/i.exec(text) ||
     /\bnext\s+(?:three|3)\s+months?\b/i.exec(text);
-  if (!monthsMatch) return null;
+  const one =
+    !three &&
+    (/\b(?:in|over|for|during)\s+the\s+next\s+months?\b/i.exec(text) ||
+      /\bnext\s+months?\b/i.exec(text));
+  if (!three && !one) return null;
   const from = getSearchAnchor();
   const end = new Date(`${from}T00:00:00`);
-  end.setMonth(end.getMonth() + 3);
+  if (three) end.setMonth(end.getMonth() + 3);
+  else end.setDate(end.getDate() + 30);
   let to = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
   if (to > DATA_MAX) to = DATA_MAX;
   if (from > to) return null;
@@ -183,6 +188,12 @@ export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent
       next.layout = /\bbudget\b|how far|left over|have left/i.test(text)
         ? 'budget'
         : 'destinations';
+    }
+    if (isEasternEuropeQuery(text) && !isLiftRegionQuery(text)) {
+      next.dest_region = 'eastern_europe';
+    }
+    if (isLiftRegionQuery(text)) {
+      delete next.dest_region;
     }
   }
 
@@ -231,12 +242,34 @@ export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent
     next.direction = 'return';
   } else if (isRoundTripQuery(text)) {
     next.direction = 'both';
+    // Round-trip wording without a "cheapest day/weekend in a window" frame
+    // should show a paired itinerary, not a one-way day calendar.
+    if (!isCheapestWhenQuery(text) && !isCompareQuery(text)) {
+      next.layout = 'itinerary';
+    }
   }
 
   if (!next.sort_by) next.sort_by = 'cheapest';
 
   return next;
 };
+
+/** Explicit reset — drop prior city/date even if the model echoed them. */
+export const RESET_CUE =
+  /\b(?:start over|start again|new search|forget(?:\s+(?:that|it|the|everything|all))?(?:\s+please)?|reset|never ?mind|clear(?:\s+(?:search|all|everything))?)\b/i;
+
+export const isLiftRegionQuery = (text: string): boolean =>
+  /\blift\s+(?:the\s+)?restriction\b/i.test(text) ||
+  /\ball\s+europe\b/i.test(text) ||
+  /\bany(?:where)?\s+in\s+europe\b/i.test(text) ||
+  /\bentire\s+europe\b/i.test(text) ||
+  /\bno\s+(?:region\s+)?restriction\b/i.test(text);
+
+export const isEasternEuropeQuery = (text: string): boolean =>
+  /\beastern\s+europe(?:an)?\b/i.test(text) ||
+  /\beast(?:ern)?\s+(?:of\s+)?(?:europe|germany)\b/i.test(text) ||
+  /\bcountries?\s+east(?:ern)?\s+of\s+germany\b/i.test(text) ||
+  /\beast\s+of\s+germany\b/i.test(text);
 
 /**
  * Same-thread merge: a newly named city (or open explore) is a fresh search
@@ -248,6 +281,28 @@ export const resolveTurnIntent = (
   text: string
 ): GenIntent => {
   let next = applyIntentBackstops(incoming, text);
+
+  if (RESET_CUE.test(text)) {
+    const day = dateFromText(text);
+    const window = flexibleWindowFromText(text);
+    const dest = destinationFromText(text);
+    const eastern = isEasternEuropeQuery(text) && !isLiftRegionQuery(text) && !dest;
+    const fresh: GenIntent = {
+      sort_by: 'cheapest',
+      layout: eastern || isOpenExploreQuery(text) || isLiftRegionQuery(text) ? 'destinations' : next.layout ?? 'grid',
+      direction: isRoundTripQuery(text) ? 'both' : 'outbound',
+    };
+    if (dest) fresh.dest_city = dest;
+    if (day) fresh.date = day;
+    else if (window) {
+      fresh.date_from = window.date_from;
+      fresh.date_to = window.date_to;
+    }
+    if (maxPriceFromText(text) != null) fresh.max_price = maxPriceFromText(text)!;
+    if (/\bweekend\b/i.test(text)) fresh.weekend = true;
+    if (eastern) fresh.dest_region = 'eastern_europe';
+    return applyIntentBackstops(fresh, text);
+  }
 
   if (isPureRefinement(text) && prev) {
     const {
@@ -270,16 +325,33 @@ export const resolveTurnIntent = (
     return next;
   }
 
-  if (isOpenExploreQuery(text)) {
+  if (
+    isOpenExploreQuery(text) ||
+    isLiftRegionQuery(text) ||
+    (isEasternEuropeQuery(text) && !destinationFromText(text))
+  ) {
     const price = maxPriceFromText(text) ?? next.max_price ?? prev?.max_price;
     const weekend = /\bweekend\b/i.test(text) || next.weekend || false;
-    return {
+    const eastern = isEasternEuropeQuery(text) && !isLiftRegionQuery(text);
+    const window = flexibleWindowFromText(text);
+    const explore: GenIntent = {
       sort_by: 'cheapest',
       max_price: price,
       weekend: weekend || undefined,
       layout: next.layout ?? 'destinations',
       direction: 'outbound',
+      dest_region: eastern ? 'eastern_europe' : undefined,
     };
+    if (window) {
+      explore.date_from = window.date_from;
+      explore.date_to = window.date_to;
+    } else if (prev && (prev.date_from || prev.date_to || prev.date)) {
+      // Region refine keeps prior window so we don't re-ask / re-default.
+      if (prev.date) explore.date = prev.date;
+      if (prev.date_from) explore.date_from = prev.date_from;
+      if (prev.date_to) explore.date_to = prev.date_to;
+    }
+    return explore;
   }
 
   if (!prev) return next;
@@ -297,6 +369,7 @@ export const resolveTurnIntent = (
       fresh.dest_city = textCity;
       delete fresh.dest_code;
     }
+    delete fresh.dest_region;
     if (maxPriceFromText(text) == null) delete fresh.max_price;
     if (departureAfterFromText(text) == null) {
       delete fresh.departure_after;
@@ -320,7 +393,9 @@ export const resolveTurnIntent = (
 
 /** Whether Groq user-history would only contaminate this turn. */
 export const shouldOmitGroqHistory = (text: string, prev: GenIntent | null): boolean => {
-  if (isOpenExploreQuery(text)) return true;
+  if (isOpenExploreQuery(text) || isLiftRegionQuery(text) || isEasternEuropeQuery(text) || RESET_CUE.test(text)) {
+    return true;
+  }
   const city = destinationFromText(text);
   if (!city || !prev?.dest_city) return false;
   return city.toLowerCase() !== prev.dest_city.trim().toLowerCase();
@@ -408,12 +483,14 @@ const studyBudgetExplore = (text: string): GenIntent | null => {
     /\bbudget\b/i.test(text);
   if (!openEnded) return null;
   if (!/\b(?:fly|flying|flight|flights|go|travel|trip|options?)\b/i.test(text)) return null;
+  const eastern = isEasternEuropeQuery(text) && !isLiftRegionQuery(text);
   return {
     max_price: price,
     weekend: true,
     sort_by: 'cheapest',
     direction: 'outbound',
     layout: 'destinations',
+    dest_region: eastern ? 'eastern_europe' : undefined,
   };
 };
 
@@ -440,13 +517,19 @@ export const tryLocalIntent = (text: string, hasPrevious = false): GenIntent | n
   const study = matchStudyTaskIntent(t);
   if (study) return applyIntentBackstops(study, t);
 
-  if (isOpenExploreQuery(t)) {
+  if (
+    isOpenExploreQuery(t) ||
+    isLiftRegionQuery(t) ||
+    (isEasternEuropeQuery(t) && !destinationFromText(t))
+  ) {
+    const eastern = isEasternEuropeQuery(t) && !isLiftRegionQuery(t);
     return applyIntentBackstops(
       {
         max_price: maxPriceFromText(t) ?? undefined,
         weekend: /\bweekend\b/i.test(t) || undefined,
         sort_by: 'cheapest',
         layout: 'destinations',
+        dest_region: eastern ? 'eastern_europe' : undefined,
       },
       t
     );

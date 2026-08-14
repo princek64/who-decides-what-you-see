@@ -226,6 +226,26 @@ export const DESTINATION_CITIES = Array.from(
   )
 ).sort();
 
+/** Destination cities that count as Eastern Europe for region filters. */
+export const EASTERN_EUROPE_CITIES = [
+  'Warsaw', 'Krakow', 'Gdansk', 'Katowice', 'Wroclaw', 'Prague', 'Bratislava',
+  'Kosice', 'Budapest', 'Bucharest', 'Cluj-Napoca', 'Iasi', 'Sofia', 'Varna',
+  'Tallinn', 'Riga', 'Vilnius', 'Kaunas', 'Zagreb', 'Split', 'Dubrovnik',
+  'Ljubljana', 'Belgrade', 'Sarajevo', 'Tirana', 'Skopje', 'Ohrid', 'Chisinau',
+  'Podgorica', 'Tivat',
+] as const;
+
+let _easternCodes: Set<string> | null = null;
+export const easternEuropeAirportCodes = (): Set<string> => {
+  if (_easternCodes) return _easternCodes;
+  const codes = new Set<string>();
+  for (const city of EASTERN_EUROPE_CITIES) {
+    for (const c of getCodesForCityQuery(city)) codes.add(c);
+  }
+  _easternCodes = codes;
+  return codes;
+};
+
 // ─── Generative-UI additions: display-only static data ───
 
 // Country per city, for destination cards ("Barcelona, Spain")

@@ -7,6 +7,8 @@ import { LONDON_CODES, londonAirportLabel } from '../lib/slots';
 
 interface ChatBubbleProps {
   message: ChatMessage;
+  /** Hide prior flight tables while a clarifying slot question is active. */
+  suppressResults?: boolean;
   /** Present only on a retryable system notice (rate limit / 5xx): re-sends the
    *  message the failure swallowed. Assistant answers have no retry — see the
    *  footer comment below. */
@@ -152,6 +154,7 @@ const renderFormattedBlocks = (text: string, className = '') => {
 
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
   message,
+  suppressResults = false,
   onRetry,
   onPickOrigin,
   onSearchLondon,
@@ -170,7 +173,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     }
   };
 
-  const hasResults = !isUser && !!message.flights && message.flights.length > 0;
+  const hasResults =
+    !isUser &&
+    !suppressResults &&
+    !!message.flights &&
+    message.flights.length > 0;
 
   const formatTime = (timestamp: number) =>
     new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

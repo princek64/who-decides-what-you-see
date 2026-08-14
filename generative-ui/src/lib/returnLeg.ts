@@ -37,6 +37,10 @@ const MONTHS: Record<string, number> = {
   may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8,
   september: 9, sept: 9, sep: 9, october: 10, oct: 10,
   november: 11, nov: 11, december: 12, dec: 12,
+  // German spellings seen in live sessions ("oktober 21") — without these,
+  // dateFromText misses the day and the app re-asks "Which dates?".
+  januar: 1, februar: 2, maerz: 3, 'märz': 3, marz: 3, mai: 5, juni: 6,
+  juli: 7, oktober: 10, dezember: 12,
 };
 const MONTH_NAMES = Object.keys(MONTHS).join('|');
 const DAY_THEN_MONTH = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_NAMES})\\b`, 'i');

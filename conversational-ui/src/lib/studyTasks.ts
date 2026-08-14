@@ -22,6 +22,8 @@ import {
   isCompareQuery,
   isDirectOnlyQuery,
   isDropDirectQuery,
+  isEasternEuropeQuery,
+  isLiftRegionQuery,
   isOneWayQuery,
   isOpenExploreQuery,
   isPureRefinement,
@@ -181,6 +183,7 @@ const matchBudgetWeekendExplore = (text: string): SlotJSON | null => {
       max_price: price,
       anywhere: true,
       weekend: true,
+      dest_region: isEasternEuropeQuery(text) ? 'eastern_europe' : null,
       missing: [],
     }),
     text
@@ -222,7 +225,9 @@ export const tryLocalSlot = (
   const study = matchStudyTaskSlot(t);
   if (study) return study;
 
-  if (isOpenExploreQuery(t)) {
+  if (isOpenExploreQuery(t) || isLiftRegionQuery(t) || (isEasternEuropeQuery(t) && !destinationFromText(t))) {
+    const eastern = isEasternEuropeQuery(t) && !isLiftRegionQuery(t);
+    const window = flexibleWindowFromText(t);
     return finalize(
       blank({
         anywhere: true,
@@ -230,6 +235,9 @@ export const tryLocalSlot = (
         sort: 'cheapest',
         max_price: maxPriceFromText(t),
         weekend: /\bweekend\b/i.test(t),
+        dest_region: eastern ? 'eastern_europe' : null,
+        date_from: window?.date_from ?? null,
+        date_to: window?.date_to ?? null,
         missing: [],
       }),
       t

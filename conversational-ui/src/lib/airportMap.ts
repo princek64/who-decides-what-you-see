@@ -217,6 +217,52 @@ export function getCityName(code: string): string {
   return AIRPORT_TO_CITY[code] || code;
 }
 
+/** Destination cities in-network that count as Eastern Europe. */
+export const EASTERN_EUROPE_CITIES = [
+  'Warsaw',
+  'Krakow',
+  'Gdansk',
+  'Katowice',
+  'Wroclaw',
+  'Prague',
+  'Bratislava',
+  'Kosice',
+  'Budapest',
+  'Bucharest',
+  'Cluj-Napoca',
+  'Iasi',
+  'Sofia',
+  'Varna',
+  'Tallinn',
+  'Riga',
+  'Vilnius',
+  'Kaunas',
+  'Zagreb',
+  'Split',
+  'Dubrovnik',
+  'Ljubljana',
+  'Belgrade',
+  'Sarajevo',
+  'Tirana',
+  'Skopje',
+  'Ohrid',
+  'Chisinau',
+  'Podgorica',
+  'Tivat',
+] as const;
+
+/** Airport codes for the Eastern Europe allowlist (cached). */
+let _easternCodes: Set<string> | null = null;
+export const easternEuropeAirportCodes = (): Set<string> => {
+  if (_easternCodes) return _easternCodes;
+  const codes = new Set<string>();
+  for (const city of EASTERN_EUROPE_CITIES) {
+    for (const c of getCodesForCityQuery(city)) codes.add(c);
+  }
+  _easternCodes = codes;
+  return codes;
+};
+
 // Get all unique destination city names (excluding London airports) for autocomplete suggestions
 export const DESTINATION_CITIES = Array.from(
   new Set(

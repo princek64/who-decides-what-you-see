@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { getCodesForCityQuery, getCityName } from '../lib/airportMap';
+import { getCodesForCityQuery, getCityName, easternEuropeAirportCodes } from '../lib/airportMap';
 
 export interface Flight {
   flight_id: string;
@@ -59,6 +59,8 @@ export interface IntentJSON {
    *  the itinerary builder alone, so "£150 and a free weekend" returned an
    *  unconstrained Jul–Dec result set. */
   weekend?: boolean;
+  /** Coarse region allowlist for open explore (Eastern Europe). */
+  dest_region?: 'eastern_europe';
 }
 
 // Weekend-break departure days: Friday (5), Saturday (6), Sunday (0). Flying
@@ -227,6 +229,14 @@ export const filterAndSortFlights = (
     const destCityQuery = intent.dest_city.trim().toLowerCase();
     filtered = filtered.filter((f) =>
       f.dest_code.toLowerCase().includes(destCityQuery)
+    );
+  }
+
+  // 3b. Eastern Europe region allowlist (open explore with no single city).
+  if (intent.dest_region === 'eastern_europe' && destCodes.length === 0) {
+    const region = easternEuropeAirportCodes();
+    filtered = filtered.filter((f) =>
+      direction === 'return' ? region.has(f.origin_code) : region.has(f.dest_code)
     );
   }
 

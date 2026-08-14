@@ -179,6 +179,11 @@ export const ChatView: React.FC = () => {
   const searchingLabel = buildSearchingStatus(lastUserText ?? '');
   // A rate-limit notice is only actionable while it is the newest thing said.
   const lastMessageId = messages[messages.length - 1]?.id;
+  // When we are asking for a slot, hide prior result tables so the clarifying
+  // question is not buried under the previous search answer.
+  const suppressStaleResults = Boolean(
+    [...messages].reverse().find((m) => m.role === 'assistant' && m.awaitingSlot)
+  );
 
   const composer = (
     <form onSubmit={handleSend} className="flex gap-2 items-end w-full">
@@ -324,6 +329,7 @@ export const ChatView: React.FC = () => {
                       >
                       <ChatBubble
                         message={message}
+                        suppressResults={suppressStaleResults && !message.awaitingSlot}
                         onRetry={
                           message.role === 'system' &&
                           message.id === lastMessageId &&

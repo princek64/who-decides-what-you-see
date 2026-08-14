@@ -24,12 +24,14 @@ export const CalendarView: React.FC<{
     return [vals[Math.floor(vals.length / 3)], vals[Math.floor((vals.length * 2) / 3)]];
   }, [prices]);
 
-  // Cheapest weekend day across the window (the task-4 answer, made explicit)
+  // Cheapest weekend-break day across the window — Fri/Sat/Sun, matching
+  // isWeekendDeparture in the filter (and explicit "Friday–Sunday" wording).
+  // Sat/Sun-only used to ignore Friday even when the user asked Fri–Sun.
   const cheapestWeekend = useMemo(() => {
     let best: Flight | null = null;
     for (const d of dates) {
       const day = new Date(`${d}T00:00:00`).getDay();
-      if (day !== 0 && day !== 6) continue;
+      if (day !== 5 && day !== 6 && day !== 0) continue; // Fri, Sat, Sun
       if (!best || prices[d].price_gbp < best.price_gbp) best = prices[d];
     }
     return best;
@@ -49,7 +51,7 @@ export const CalendarView: React.FC<{
       {cheapestWeekend && (
         <div className="bg-muted border border-border rounded-lg px-4 py-2.5 text-xs font-medium flex justify-between items-center text-foreground">
           <span>
-            Cheapest single weekend day (Sat/Sun): {new Date(`${cheapestWeekend.date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+            Cheapest weekend departure (Fri–Sun): {new Date(`${cheapestWeekend.date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
           </span>
           <span className="font-mono tabular-nums font-semibold">£{cheapestWeekend.price_gbp.toFixed(2)}</span>
         </div>
@@ -119,7 +121,7 @@ export const CalendarView: React.FC<{
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-white/[0.06] border border-border"></span>Cheaper</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-muted border border-border"></span>Typical</span>
         <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm border border-border"></span>Pricier</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-foreground"></span>Cheapest weekend day</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-foreground"></span>Cheapest Fri–Sun departure</span>
       </div>
     </div>
   );

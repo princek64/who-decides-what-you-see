@@ -3,12 +3,12 @@ import { resolveDestCodes } from '../hooks/useFlightFilter';
 import type { ChatMessage } from '../hooks/useGenChat';
 
 /**
- * How many superseded screens stay visible above the current one. Two is the
- * brief: enough to refer back to what you just came from, few enough that the
- * collapsed rows never become a scrolling list of their own. Anything older is
- * dropped from the canvas (it stays in `messages` and in the session log).
+ * How many superseded screens stay visible above the current one.
+ * Live sessions treated stacked prior answers as "stuck on the previous
+ * search," so the canvas keeps only the live screen. Prior turns remain in
+ * `messages` / the session log; trash still clears everything.
  */
-export const MAX_HISTORY_SCREENS = 2;
+export const MAX_HISTORY_SCREENS = 0;
 
 const hasText = (v?: string): boolean => Boolean(v && v.trim());
 

@@ -44,6 +44,9 @@ export interface SlotJSON {
    *  would hide them to prefer directs. Set by "include the ones with a stop"
    *  follow-ups that answer that standing offer. */
   keep_stops?: boolean;
+  /** App-side only: coarse region filter for open explore (e.g. Eastern Europe).
+   *  Cleared when the user lifts the restriction or names a specific city. */
+  dest_region?: 'eastern_europe' | null;
 }
 
 // The only origin in the dataset is London. These are its airports.
@@ -89,10 +92,10 @@ export const classifyOrigin = (origin: string | null | undefined): OriginKind =>
 export const firstMissingRequiredSlot = (
   slot: SlotJSON
 ): 'destination' | 'dates' | null => {
-  // "Anywhere" exploration is a valid, complete search on its own: the whole
-  // point is that the user has NOT picked a destination (and often no dates),
-  // so we never block it with a slot-filling question — we just search.
-  if (slot.anywhere) return null;
+  // "Anywhere" / region exploration is a valid, complete search on its own: the
+  // whole point is that the user has NOT picked a destination (and often no
+  // dates), so we never block it with a slot-filling question — we just search.
+  if (slot.anywhere || slot.dest_region === 'eastern_europe') return null;
   const hasDestination = Boolean(
     slot.destination && String(slot.destination).trim()
   );
@@ -297,6 +300,10 @@ const MONTHS: Record<string, number> = {
   may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8,
   september: 9, sept: 9, sep: 9, october: 10, oct: 10,
   november: 11, nov: 11, december: 12, dec: 12,
+  // German spellings seen in live sessions ("oktober 21") — without these,
+  // dateFromText misses the day and the app re-asks "Which dates?".
+  januar: 1, februar: 2, maerz: 3, 'märz': 3, marz: 3, mai: 5, juni: 6,
+  juli: 7, oktober: 10, dezember: 12,
 };
 const MONTH_NAMES = Object.keys(MONTHS).join('|');
 const DAY_THEN_MONTH = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_NAMES})\\b`, 'i');
@@ -417,20 +424,26 @@ export const departureAfterFromText = (text: string): string | null => {
 };
 
 /**
- * "in the next three months" / "over the next 3 months" → [anchor, anchor+3m]
+ * "in the next three months" → [anchor, anchor+3m]
+ * "in the next month" → [anchor, anchor+30d]
  * clamped to the dataset window. Null when the wording is not a flexible
- * multi-month window (so a concrete day like "16 October" is left alone).
+ * window (so a concrete day like "16 October" is left alone).
  */
 export const flexibleWindowFromText = (
   text: string
 ): { date_from: string; date_to: string } | null => {
-  const monthsMatch =
+  const three =
     /\b(?:in|over|for|during)\s+the\s+next\s+(?:three|3)\s+months?\b/i.exec(text) ||
     /\bnext\s+(?:three|3)\s+months?\b/i.exec(text);
-  if (!monthsMatch) return null;
+  const one =
+    !three &&
+    (/\b(?:in|over|for|during)\s+the\s+next\s+months?\b/i.exec(text) ||
+      /\bnext\s+months?\b/i.exec(text));
+  if (!three && !one) return null;
   const from = getSearchAnchor();
   const end = new Date(`${from}T00:00:00`);
-  end.setMonth(end.getMonth() + 3);
+  if (three) end.setMonth(end.getMonth() + 3);
+  else end.setDate(end.getDate() + 30);
   let to = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
   if (to > DATA_MAX) to = DATA_MAX;
   if (from > to) return null;
@@ -499,8 +512,21 @@ export const applyWordingBackstops = (slot: SlotJSON, text: string): SlotJSON =>
   if (isOpenExploreQuery(text) && !destinationFromText(text)) {
     slot.anywhere = true;
     slot.destination = null;
-  } else if (slot.anywhere && !isOpenExploreQuery(text)) {
+  } else if (slot.anywhere && !isOpenExploreQuery(text) && !isEasternEuropeQuery(text) && !isLiftRegionQuery(text)) {
     slot.anywhere = false;
+  }
+  if (isEasternEuropeQuery(text) && !destinationFromText(text) && !isLiftRegionQuery(text)) {
+    slot.anywhere = true;
+    slot.destination = null;
+    slot.dest_region = 'eastern_europe';
+  }
+  if (isLiftRegionQuery(text)) {
+    slot.anywhere = true;
+    slot.destination = null;
+    slot.dest_region = null;
+  }
+  if (destinationFromText(text)) {
+    slot.dest_region = null;
   }
   if (isCompareQuery(text)) {
     slot.compare = true;
@@ -626,13 +652,61 @@ const CARRYABLE_SLOTS = [
   'round_trip',
   'return_only',
   'keep_stops',
+  'dest_region',
+  'anywhere',
 ] as const;
 
 const MODIFIER_CUE =
   /\b(?:instead|same date|same day|same dates|same time|same budget|same price|same cap|that date|those dates|make it|change (?:it|that) to|what about|how about|and also|as well|rather than|but)\b/i;
 
-// Explicit "throw away the current search" phrases.
-const RESET_CUE = /\b(?:start over|start again|new search|forget (?:that|it|the)|reset|never ?mind)\b/i;
+// Explicit "throw away the current search" phrases. Live sessions used
+// "Forget everything" which the old pattern missed (it only matched
+// forget that/it/the).
+export const RESET_CUE =
+  /\b(?:start over|start again|new search|forget(?:\s+(?:that|it|the|everything|all))?(?:\s+please)?|reset|never ?mind|clear(?:\s+(?:search|all|everything))?)\b/i;
+
+/** Broaden / lift a region restrict back to all Europe (anywhere explore). */
+export const isLiftRegionQuery = (text: string): boolean =>
+  /\blift\s+(?:the\s+)?restriction\b/i.test(text) ||
+  /\ball\s+europe\b/i.test(text) ||
+  /\bany(?:where)?\s+in\s+europe\b/i.test(text) ||
+  /\bentire\s+europe\b/i.test(text) ||
+  /\bno\s+(?:region\s+)?restriction\b/i.test(text);
+
+/**
+ * Eastern Europe (or "east of Germany") without naming a city — region filter
+ * for open explore, not a destination slot ask.
+ */
+export const isEasternEuropeQuery = (text: string): boolean =>
+  /\beastern\s+europe(?:an)?\b/i.test(text) ||
+  /\beast(?:ern)?\s+(?:of\s+)?(?:europe|germany)\b/i.test(text) ||
+  /\bcountries?\s+east(?:ern)?\s+of\s+germany\b/i.test(text) ||
+  /\beast\s+of\s+germany\b/i.test(text);
+
+/** Countries treated as Eastern Europe for the study dataset filter. */
+export const EASTERN_EUROPE_COUNTRIES = new Set([
+  'Poland',
+  'Czechia',
+  'Slovakia',
+  'Hungary',
+  'Romania',
+  'Bulgaria',
+  'Estonia',
+  'Latvia',
+  'Lithuania',
+  'Croatia',
+  'Slovenia',
+  'Serbia',
+  'Bosnia & Herzegovina',
+  'Albania',
+  'North Macedonia',
+  'Moldova',
+  'Montenegro',
+  'Ukraine',
+]);
+
+/** Destination cities in-network that count as Eastern Europe (see airportMap). */
+export { EASTERN_EUROPE_CITIES, easternEuropeAirportCodes } from './airportMap';
 
 const hasValue = (v: unknown): boolean =>
   v !== null && v !== undefined && !(typeof v === 'string' && !v.trim());
@@ -642,14 +716,56 @@ export const resolveTurnSlot = (
   nextRaw: SlotJSON,
   text: string
 ): SlotJSON => {
-  const wantsExplore = Boolean(nextRaw.anywhere) && isOpenExploreQuery(text);
-  if (!prev || RESET_CUE.test(text) || nextRaw.off_topic) return nextRaw;
+  if (nextRaw.off_topic) return nextRaw;
+
+  const wantsExplore =
+    (Boolean(nextRaw.anywhere) && isOpenExploreQuery(text)) ||
+    isLiftRegionQuery(text) ||
+    (isEasternEuropeQuery(text) && !destinationFromText(text));
+
+  if (RESET_CUE.test(text)) {
+    const day = dateFromText(text);
+    const window = flexibleWindowFromText(text);
+    const dest = destinationFromText(text);
+    const eastern = isEasternEuropeQuery(text) && !isLiftRegionQuery(text) && !dest;
+    return {
+      ...nextRaw,
+      destination: dest ?? null,
+      date_from: day ?? window?.date_from ?? null,
+      date_to: day ?? window?.date_to ?? null,
+      dest_region: eastern ? 'eastern_europe' : null,
+      anywhere:
+        Boolean(nextRaw.anywhere) ||
+        isOpenExploreQuery(text) ||
+        isLiftRegionQuery(text) ||
+        eastern,
+      missing: [],
+    };
+  }
+
+  if (!prev) {
+    if (wantsExplore || (isEasternEuropeQuery(text) && !destinationFromText(text))) {
+      const eastern = isEasternEuropeQuery(text) && !isLiftRegionQuery(text);
+      return {
+        ...nextRaw,
+        anywhere: true,
+        destination: null,
+        dest_region: eastern ? 'eastern_europe' : nextRaw.dest_region ?? null,
+        missing: [],
+      };
+    }
+    return nextRaw;
+  }
 
   // Open exploration keeps budget/weekend from the previous turn but drops the
   // previous city, dates, and time filters — "pick from anywhere in Europe"
   // after an Amsterdam search must not lose the £150 cap, and "weekend for
   // £150" must not keep Amsterdam + after 6pm.
   if (wantsExplore) {
+    const eastern =
+      isEasternEuropeQuery(text) && !isLiftRegionQuery(text);
+    const window = flexibleWindowFromText(text);
+    const day = dateFromText(text);
     return {
       ...nextRaw,
       anywhere: true,
@@ -660,8 +776,13 @@ export const resolveTurnSlot = (
       cheapest_when: false,
       round_trip: false,
       return_only: false,
+      dest_region: eastern ? 'eastern_europe' : null,
       max_price: hasValue(nextRaw.max_price) ? nextRaw.max_price : prev.max_price ?? null,
       weekend: Boolean(nextRaw.weekend) || Boolean(prev.weekend) || /\bweekend\b/i.test(text),
+      // Region refine of an already-dated explore keeps dates so we don't
+      // bounce to "Which dates?" (live-session failure mode).
+      date_from: day ?? window?.date_from ?? (hasValue(nextRaw.date_from) ? nextRaw.date_from : prev.date_from),
+      date_to: day ?? window?.date_to ?? (hasValue(nextRaw.date_to) ? nextRaw.date_to : prev.date_to),
       missing: [],
     };
   }
@@ -793,6 +914,7 @@ export const slotToIntent = (slot: SlotJSON): IntentJSON => {
   if (slot.flexibility && slot.flexibility.trim()) intent.flexibility = slot.flexibility.trim();
   if (slot.low_co2) intent.low_co2 = true;
   if (slot.weekend) intent.weekend_only = true;
+  if (slot.dest_region === 'eastern_europe') intent.dest_region = 'eastern_europe';
 
   return intent;
 };
