@@ -6,11 +6,14 @@
  */
 import {
   RESET_CUE,
+  applyWordingBackstops,
   dateFromText,
   firstMissingRequiredSlot,
   flexibleWindowFromText,
+  isAnywhereQuery,
   isEasternEuropeQuery,
   isLiftRegionQuery,
+  isOpenExploreQuery,
   resolveTurnSlot,
   slotToIntent,
 } from '../src/lib/slots';
@@ -114,6 +117,40 @@ console.log('\n### C2 — next month vs three months');
     check('next month ~30 days', span1 >= 28 && span1 <= 35, `span=${span1}`);
     check('three months >> next month', span3 > span1 + 40, `span3=${span3} span1=${span1}`);
   }
+}
+
+console.log('\n### open dest follow-ups after budget ask');
+{
+  // Cold budget + London origin still asks for a destination once…
+  const cold = 'cheapest flights under 150 pounds from any london airports';
+  check('cold budget is not open explore', !isOpenExploreQuery(cold));
+  check('any london airports is not any destinations', !isAnywhereQuery(cold));
+
+  const awaiting = blank({
+    destination: null,
+    max_price: 150,
+    sort: 'cheapest',
+    missing: ['destination'],
+  });
+  check('awaiting dest asks destination', firstMissingRequiredSlot(awaiting) === 'destination');
+
+  // …but declining to name a city must run an anywhere search, keeping £150.
+  for (const follow of ['any destinations', 'suggest destinations', 'within europe']) {
+    check(`detect open: ${follow}`, isOpenExploreQuery(follow) || isLiftRegionQuery(follow));
+    const local = tryLocalSlot(follow, true);
+    check(`local slot: ${follow}`, local != null && local.anywhere === true);
+    const merged = resolveTurnSlot(
+      awaiting,
+      applyWordingBackstops(local ?? blank({ anywhere: true }), follow),
+      follow
+    );
+    check(`anywhere: ${follow}`, merged.anywhere === true);
+    check(`keeps £150: ${follow}`, merged.max_price === 150, String(merged.max_price));
+    check(`no dest ask: ${follow}`, firstMissingRequiredSlot(merged) == null);
+  }
+
+  check('Barcelona in europe is not a lift', !isLiftRegionQuery('flights to Barcelona in europe'));
+  check('under 25 alone is not anywhere', !isAnywhereQuery('under 25'));
 }
 
 if (failures > 0) {

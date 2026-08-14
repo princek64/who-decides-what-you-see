@@ -8,13 +8,17 @@ import { dateFromText } from '../src/lib/returnLeg';
 import {
   RESET_CUE,
   flexibleWindowFromText,
+  isAnywhereQuery,
   isEasternEuropeQuery,
+  isLiftRegionQuery,
+  isOpenExploreQuery,
   needsDatesClarification,
   resolveTurnIntent,
   tryLocalIntent,
 } from '../src/lib/intentBackstops';
 import { easternEuropeAirportCodes } from '../src/lib/airportMap';
 import { getSearchAnchor } from '../src/constants/prompts';
+import type { GenIntent } from '../src/hooks/useGenChat';
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail = '') => {
@@ -105,6 +109,25 @@ console.log('\n### B1 — round trip without cheapest-when → itinerary');
   // round trip + window should prefer itinerary when not a calendar cheapest-when.
   check('Lisbon round trip local', intent != null);
   check('Lisbon direction both', intent?.direction === 'both');
+}
+
+console.log('\n### open dest follow-ups after budget ask');
+{
+  const cold = 'cheapest flights under 150 pounds from any london airports';
+  check('cold budget is not open explore', !isOpenExploreQuery(cold));
+  check('any london airports is not any destinations', !isAnywhereQuery(cold));
+
+  const prev: GenIntent = { max_price: 150, sort_by: 'cheapest' };
+  for (const follow of ['any destinations', 'suggest destinations', 'within europe']) {
+    check(`detect open: ${follow}`, isOpenExploreQuery(follow) || isLiftRegionQuery(follow));
+    const local = tryLocalIntent(follow, true);
+    check(`local intent: ${follow}`, local != null);
+    const merged = resolveTurnIntent(prev, local ?? {}, follow);
+    check(`destinations layout: ${follow}`, merged.layout === 'destinations');
+    check(`keeps £150: ${follow}`, merged.max_price === 150, String(merged.max_price));
+    check(`no city forced: ${follow}`, !merged.dest_city);
+  }
+  check('Barcelona in europe is not a lift', !isLiftRegionQuery('flights to Barcelona in europe'));
 }
 
 if (failures > 0) {

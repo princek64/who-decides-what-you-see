@@ -52,7 +52,11 @@ const normCity = (c?: string | null): string | null => {
 export const isAnywhereQuery = (text: string): boolean =>
   /\bwhere (?:can|could|should|might|would|to)\b/i.test(text) ||
   /\b(?:surprise me|anywhere|somewhere)\b/i.test(text) ||
-  /\bwhere (?:can|could|should) (?:i|we|you)\b/i.test(text);
+  /\bwhere (?:can|could|should) (?:i|we|you)\b/i.test(text) ||
+  /\bany\s+destinations?\b/i.test(text) ||
+  /\bsuggest(?:\s+\w+){0,3}\s+destinations?\b/i.test(text) ||
+  /\brecommend(?:\s+\w+){0,3}\s+destinations?\b/i.test(text) ||
+  /\bno\s+(?:particular|specific|preferred)\s+(?:city|destination|place)\b/i.test(text);
 
 export const isOneWayQuery = (text: string): boolean =>
   /\bone[- ]way\b/i.test(text) ||
@@ -263,7 +267,11 @@ export const isLiftRegionQuery = (text: string): boolean =>
   /\ball\s+europe\b/i.test(text) ||
   /\bany(?:where)?\s+in\s+europe\b/i.test(text) ||
   /\bentire\s+europe\b/i.test(text) ||
-  /\bno\s+(?:region\s+)?restriction\b/i.test(text);
+  /\bno\s+(?:region\s+)?restriction\b/i.test(text) ||
+  (!destinationFromText(text) &&
+    (/\bwithin\s+europe\b/i.test(text) ||
+      /\b(?:destinations?|places?|cities|options?|flights?)\s+in\s+europe\b/i.test(text) ||
+      /\bonly\s+(?:in\s+)?europe\b/i.test(text)));
 
 export const isEasternEuropeQuery = (text: string): boolean =>
   /\beastern\s+europe(?:an)?\b/i.test(text) ||
