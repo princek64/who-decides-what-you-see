@@ -11,6 +11,7 @@ import {
   retryAfterSeconds,
   retryDelayMs,
 } from '../src/lib/apiRetry';
+import { GROQ_MODEL } from '../../shared/groq';
 
 let pass = 0;
 let fail = 0;
@@ -86,7 +87,7 @@ const runWithBackoff = async (call: () => Promise<string>): Promise<string> => {
   let calls = 0;
   let thrown: any = null;
   const tpd =
-    'Rate limit reached for model openai/gpt-oss-20b on tokens per day (TPD): Limit 200000, Used 199429, Requested 3981. Please try again in 24m12.54s.';
+    `Rate limit reached for model ${GROQ_MODEL} on tokens per day (TPD): Limit 200000, Used 199429, Requested 3981. Please try again in 24m12.54s.`;
   try {
     await runWithBackoff(async () => {
       calls++;

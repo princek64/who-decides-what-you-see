@@ -1,6 +1,6 @@
 # Generative UI
 
-Chat-based flight search for the MA study. Same intent extraction idea as the conversational app, but the model also chooses the results layout (grid, map, calendar, etc.). Stack: React, Vite, TypeScript, Tailwind, Groq (`openai/gpt-oss-20b`).
+Chat-based flight search for the MA study. Same intent extraction idea as the conversational app, but the model also chooses the results layout (grid, map, calendar, etc.). Stack: React, Vite, TypeScript, Tailwind, Groq (model id in `../shared/groq.ts`).
 
 ## Setup
 

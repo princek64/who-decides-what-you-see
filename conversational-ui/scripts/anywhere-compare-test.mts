@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Groq from 'groq-sdk';
 import Papa from 'papaparse';
+import { GROQ_MODEL } from '../../shared/groq';
 import { buildSystemPrompt, STRICT_RETRY_PROMPT } from '../src/constants/prompts';
 import { filterAndSortFlights } from '../src/hooks/useFlightFilter';
 import type { Flight } from '../src/hooks/useFlightFilter';
@@ -38,7 +39,7 @@ const medianCo2 = co2[Math.floor(co2.length/2)];
 async function callGroq(userMessage: string, retry = false): Promise<string> {
   const sys = buildSystemPrompt();
   const completion = await groq.chat.completions.create({
-    model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 400, reasoning_effort: 'low',
+    model: GROQ_MODEL, temperature: 0, max_tokens: 400, reasoning_effort: 'low',
     messages: [{ role: 'system', content: retry ? `${sys}\n${STRICT_RETRY_PROMPT}` : sys }, { role: 'user', content: userMessage }],
   });
   return completion.choices[0]?.message?.content ?? '';

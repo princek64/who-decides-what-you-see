@@ -14,8 +14,8 @@ All three search London → Europe on synthetic flights (1 Jul – 31 Dec 2026) 
 |---|---|---|
 | `data/` | Shared flight CSV | — |
 | [`dashboard-ui/`](dashboard-ui) | Filter-and-sort dashboard | none |
-| [`conversational-ui/`](conversational-ui) | Chat, fixed layout | Groq `openai/gpt-oss-20b` |
-| [`generative-ui/`](generative-ui) | Chat, layout chosen per query | Groq `openai/gpt-oss-20b` |
+| [`conversational-ui/`](conversational-ui) | Chat, fixed layout | Groq (see `shared/groq.ts`) |
+| [`generative-ui/`](generative-ui) | Chat, layout chosen per query | Groq (see `shared/groq.ts`) |
 
 Each app is its own Vite project. On build, `prebuild` copies the CSV from `data/` into that app’s `public/`. More detail lives in each app’s `README.md` / `DESIGN.md`.
 

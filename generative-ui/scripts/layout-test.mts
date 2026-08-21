@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Groq from 'groq-sdk';
+import { GROQ_MODEL } from '../../shared/groq';
 import { buildSystemPrompt, MODEL_LAYOUTS } from '../src/constants/prompts';
 
 const envText = fs.readFileSync(path.join(import.meta.dirname, '../.env'), 'utf8');
@@ -75,7 +76,7 @@ for (const c of cases) {
   let raw = '';
   try {
     const res = await groq.chat.completions.create({
-      model: 'openai/gpt-oss-20b',
+      model: GROQ_MODEL,
       reasoning_effort: 'low',
       temperature: 0.1,
       max_tokens: 300,

@@ -1,6 +1,6 @@
 # Conversational UI
 
-Chat-based flight search for the MA study. Same dataset as the other two apps; results always use the same layout. Stack: React, Vite, TypeScript, Tailwind, Groq (`openai/gpt-oss-20b`) for turning messages into search intent.
+Chat-based flight search for the MA study. Same dataset as the other two apps; results always use the same layout. Stack: React, Vite, TypeScript, Tailwind, Groq for turning messages into search intent (model id in `../shared/groq.ts`).
 
 ## Setup
 

@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Groq from 'groq-sdk';
 import Papa from 'papaparse';
+import { GROQ_MODEL } from '../../shared/groq';
 import { buildSystemPrompt } from '../src/constants/prompts';
 import { filterAndSortFlights, resolveDestCodes } from '../src/hooks/useFlightFilter';
 import type { Flight, IntentJSON } from '../src/hooks/useFlightFilter';
@@ -58,7 +59,7 @@ const askModel = async (q: string): Promise<SlotJSON> => {
   for (let attempt = 0; ; attempt++) {
     try {
       const c = await groq.chat.completions.create({
-        model: 'openai/gpt-oss-20b',
+        model: GROQ_MODEL,
         reasoning_effort: 'low',
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: q }],
         temperature: 0, max_tokens: 400,
