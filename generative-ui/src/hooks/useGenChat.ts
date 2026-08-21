@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Groq from 'groq-sdk';
+import { GROQ_MODEL } from '@shared/groq';
 import { buildSystemPrompt, STRICT_RETRY_PROMPT, MODEL_LAYOUTS } from '../constants/prompts';
 import type { Layout } from '../constants/prompts';
 import { filterAndSortFlights, resolveDestCodes, isRoundTripItinerary } from './useFlightFilter';
@@ -190,7 +191,7 @@ export const useGenChat = () => {
     ];
 
     const completion = await groq.chat.completions.create({
-      model: 'openai/gpt-oss-20b',
+      model: GROQ_MODEL,
       messages: messagesPayload,
       temperature: 0.1,
       // Headroom (unused tokens free); truncated JSON is a guaranteed parse failure.

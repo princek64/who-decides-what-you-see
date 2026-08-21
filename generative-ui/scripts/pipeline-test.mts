@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Groq from 'groq-sdk';
 import Papa from 'papaparse';
+import { GROQ_MODEL } from '../../shared/groq';
 import { buildSystemPrompt, MODEL_LAYOUTS } from '../src/constants/prompts';
 import { filterAndSortFlights, resolveDestCodes } from '../src/hooks/useFlightFilter';
 import type { Flight, IntentJSON } from '../src/hooks/useFlightFilter';
@@ -186,7 +187,7 @@ const completeWithRetry = async (query: string, history: string[] = []): Promise
   for (let attempts = 0; ; attempts++) {
     try {
       const completion = await groq.chat.completions.create({
-        model: 'openai/gpt-oss-20b',
+        model: GROQ_MODEL,
         reasoning_effort: 'low',
         temperature: 0.1,
         max_tokens: 300,
@@ -216,7 +217,7 @@ for (const c of cases) {
   while (true) {
     try {
       const completion = await groq.chat.completions.create({
-        model: 'openai/gpt-oss-20b',
+        model: GROQ_MODEL,
         reasoning_effort: 'low',
         temperature: 0.1,
         max_tokens: 300,

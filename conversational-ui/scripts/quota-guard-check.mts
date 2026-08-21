@@ -15,6 +15,7 @@ import { matchStudyTaskSlot, tryLocalSlot } from '../src/lib/studyTasks';
 import { resolveTurnSlot } from '../src/lib/slots';
 import type { SlotJSON } from '../src/lib/slots';
 import { getSearchAnchor } from '../src/constants/prompts';
+import { GROQ_MODEL } from '../../shared/groq';
 
 let pass = 0;
 let fail = 0;
@@ -32,7 +33,7 @@ const apiError = (status: number, message = '', headers?: Record<string, string>
   Object.assign(new Error(message || `${status} error`), { status, headers });
 
 const TPD_MSG =
-  'Rate limit reached for model openai/gpt-oss-20b in organization org_test on tokens per day (TPD): Limit 200000, Used 199429, Requested 3981. Please try again in 24m12.54s. Need more tokens? Upgrade to Dev Tier';
+  `Rate limit reached for model ${GROQ_MODEL} in organization org_test on tokens per day (TPD): Limit 200000, Used 199429, Requested 3981. Please try again in 24m12.54s. Need more tokens? Upgrade to Dev Tier`;
 
 // ── TPD vs TPM ────────────────────────────────────────────────────────────
 {
