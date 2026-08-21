@@ -1,8 +1,6 @@
 /**
- * Tasks 1 & 2 for conversational-ui: open-ended "where could you go" must NOT
- * ask for a destination, and compare / cheapest-weekend queries must yield an
- * insight sentence. Uses the REAL prompt, slot and filter code + live Groq.
- * Run from conversational-ui/:  npx tsx scripts/anywhere-compare-test.mts
+ * Tasks 1 & 2: open-ended anywhere + compare/weekend insight (live Groq).
+ * Run: npx tsx scripts/anywhere-compare-test.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

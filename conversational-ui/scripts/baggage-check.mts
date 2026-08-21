@@ -1,10 +1,4 @@
-/**
- * Offline check of the flight-detail lookups (no Groq calls).
- *
- * A question about a flight already on screen must be answered from the CSV,
- * never sent down the off-topic path — while a genuinely unrelated question
- * (hotels, visas) must NOT be captured by the same detector.
- */
+/** Offline flight-detail lookups: on-screen Qs from CSV; hotels/visas stay off-topic. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

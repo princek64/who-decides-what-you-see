@@ -1,8 +1,6 @@
 /**
- * Interview trust fixes: compare keeps stops (any city), alert copy, round-trip
- * layout preference.
- *
- * Run from conversational-ui/:  npx tsx scripts/interview-trust-check.mts
+ * Interview trust: compare keeps stops, alert copy, round-trip layout.
+ * Run: npx tsx scripts/interview-trust-check.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -75,10 +73,7 @@ for (const city of ['Lisbon', 'Malaga', 'Athens', 'Porto']) {
     check(`${city}: dataset has both stop types on that day`, true, 'skip — sparse day');
     continue;
   }
-  const prose = buildProseAnswer(results, intent, {
-    keepStops: true,
-    compare: true,
-  });
+  const prose = buildProseAnswer(results, intent, {});
   const hidOffer = /include the ones with a stop/i.test(prose.text);
   check(`${city}: prose does not offer "include stops"`, !hidOffer);
   check(

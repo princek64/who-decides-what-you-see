@@ -3,8 +3,7 @@ import type { Flight, IntentJSON } from '../../hooks/useFlightFilter';
 import { summarizeDestinations } from '../../lib/layoutData';
 import { AIRPORT_COORDS } from '../../lib/airportMap';
 
-// Hand-rolled SVG map: equirectangular projection over core Europe.
-// No tiles, no external requests — pins are cheapest fares per destination.
+// SVG map (equirectangular Europe); pins = cheapest fare per destination.
 const LON_MIN = -12, LON_MAX = 30, LAT_MIN = 34, LAT_MAX = 62;
 const W = 640, H = 480;
 
@@ -75,8 +74,7 @@ export const MapView: React.FC<{
               onMouseEnter={() => setHovered(p.code)}
               onMouseLeave={() => setHovered(null)}
               onClick={() =>
-                // Picking a city from an open/budget search means going there and
-                // back, so drill in with both directions rather than one-way only.
+                // Open/budget pick → round-trip drill-in.
                 onRefine?.(
                   { dest_city: p.city, dest_code: undefined, direction: 'both', layout: 'grid' },
                   `Flights to ${p.city}`

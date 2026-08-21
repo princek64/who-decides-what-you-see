@@ -2,36 +2,20 @@ import type { Flight, IntentJSON } from '../hooks/useFlightFilter';
 import { filterAndSortFlights, isRoundTripItinerary } from '../hooks/useFlightFilter';
 import { getCityName, getCityCountry, LONDON_AIRPORT_CODES } from './airportMap';
 
-// ─── Pure data adapters for the generative layouts ───
-// Everything here derives view-models from the already-filtered results (or,
-// for itinerary/alert, re-runs the SAME filter code with adjusted intents).
-// No fabricated data: every number shown comes from dataset rows.
+// Pure view-models from filtered results (or the same filter with adjusted intents).
 
 export interface DestinationSummary {
   code: string;
   city: string;
   country: string;
   minPrice: number;
-  /** Median fare to this destination across the result set. Unlike minPrice —
-   *  which collapses to the dataset's ~£21 budget-fare floor on nearly every
-   *  route, making all cards look identical — the median genuinely varies per
-   *  destination, so it's what we rank and surface. Labelled "~£X" (typical),
-   *  never "from £X", so it doesn't misrepresent itself as the cheapest fare. */
+  /** Median fare — min collapses to ~£21 on most routes, so cards look identical. */
   typicalPrice: number;
   minCo2: number;
   count: number;
 }
 
-/** Per-destination fare summary, ranked by the typical (median) fare ascending.
- *  We report the median rather than the minimum because the synthetic dataset
- *  has a near-uniform ~£21 price floor on every route: over any reasonable
- *  window each city has SOME £21 fare, so a per-destination minimum is real but
- *  useless for comparison (every card reads "from £21"). The median separates
- *  genuinely cheap destinations from pricier ones.
- *
- *  London airport codes are never destination cards: return legs land in London,
- *  and grouping by dest_code would otherwise surface Heathrow/Gatwick/… as if
- *  they were places you could fly *to* from London. */
+/** Rank by median fare; skip London codes so return legs don't become destination cards. */
 export const summarizeDestinations = (flights: Flight[]): DestinationSummary[] => {
   const priced: Record<string, { prices: number[]; minPrice: number; minCo2: number }> = {};
   for (const f of flights) {
@@ -74,7 +58,7 @@ export interface WeekBucket {
   flight: Flight;
 }
 
-/** Min fare per ISO week across the result set, chronological. */
+/** Min fare per ISO week, chronological. */
 export const weeklyTrend = (flights: Flight[]): WeekBucket[] => {
   const buckets: Record<string, WeekBucket> = {};
   for (const f of flights) {
@@ -100,7 +84,7 @@ export interface ComparisonPair {
   oneStop: Flight | null;
 }
 
-/** Best option of each kind under the current sort (results arrive sorted). */
+/** Best of each stop count under the current sort. */
 export const splitComparison = (flights: Flight[]): ComparisonPair => {
   return {
     direct: flights.find((f) => f.stops === 0) ?? null,
@@ -114,26 +98,14 @@ export const COMPARISON_PREVIEW_ROWS = 4;
 export interface StopGroup {
   stops: number;
   label: string;
-  /** Cheapest first, regardless of the sort applied to the result set: the
-   *  question a comparison asks is what each kind of journey costs. */
+  /** Cheapest-first within the group (comparison asks what each journey costs). */
   flights: Flight[];
 }
 
 export const stopsGroupLabel = (stops: number): string =>
   stops === 0 ? 'Direct flights' : `${stops}-stop flights`;
 
-/**
- * Every matching flight, bucketed by how many stops it makes, fewest stops
- * first.
- *
- * The comparison screen used to show ONE direct and ONE connecting flight and
- * silently drop the rest — a participant who could see six results in an
- * earlier screen asked why only two were left. Grouping keeps the direct/
- * connecting contrast the comparison exists for while accounting for every
- * flight that qualified. Buckets are derived from the data rather than hard-
- * coded to 0 and 1, so a 2-stop result is labelled and shown instead of
- * vanishing for want of a heading.
- */
+/** Bucket by stops (data-driven, not hard-coded 0/1) so multi-stop rows aren't dropped. */
 export const groupByStops = (flights: Flight[]): StopGroup[] => {
   const buckets = new Map<number, Flight[]>();
   for (const f of flights) {
@@ -173,32 +145,21 @@ export interface ItineraryPair {
 const nightsBetween = (a: string, b: string): number =>
   Math.round((new Date(`${b}T00:00:00`).getTime() - new Date(`${a}T00:00:00`).getTime()) / 86400000);
 
-// JS getDay(): 0=Sun … 6=Sat. A "weekend trip" departs Fri/Sat and returns
-// Sun/Mon, so the traveller is away for the weekend, not any random midweek pair.
+// Weekend trip: out Fri/Sat, return Sun/Mon (JS getDay: 0=Sun … 6=Sat).
 const dayOfWeek = (date: string): number => new Date(`${date}T00:00:00`).getDay();
 const isWeekendDeparture = (date: string): boolean => dayOfWeek(date) === 5 || dayOfWeek(date) === 6; // Fri, Sat
 const isWeekendReturn = (date: string): boolean => dayOfWeek(date) === 0 || dayOfWeek(date) === 1; // Sun, Mon
 
 /**
- * Build a round-trip itinerary by running the SAME filter code twice:
- * once for outbound legs, once for return legs (the dataset's return rows fly
- * EU→London, and filterAndSortFlights already handles that swap).
- * Picks the cheapest outbound that still allows a later return in the window.
- *
- * When the intent is a "weekend" trip, candidate days are constrained to a real
- * weekend — outbound Fri/Sat, return Sun/Mon, 1–4 nights — rather than the
- * globally cheapest pair of any weekdays inside the window.
+ * Round-trip via the same filter twice (return rows are EU→London).
+ * Weekend intents constrain Fri/Sat out + Sun/Mon back, 1–4 nights.
  */
 export const buildItinerary = (
   rawFlights: Flight[],
   intent: IntentJSON,
   medianCo2: number
 ): ItineraryPair | null => {
-  // Two explicit, close-together dates ("30 August out, 3 September back")
-  // are a real itinerary, not a window to search for the cheapest pairing
-  // within — pin each leg to its own exact date, same as the plain
-  // both-directions search does, so the answer text and the itinerary card
-  // never disagree about which dates were actually searched.
+  // Explicit close dates: pin each leg (don't search cheapest pair in the span).
   if (isRoundTripItinerary(intent)) {
     const outbound = filterAndSortFlights(
       rawFlights,
@@ -226,7 +187,7 @@ export const buildItinerary = (
   for (const out of outbound.slice(0, 40)) {
     const ret = returns.find((r) => {
       if (r.date <= out.date) return false;
-      // Weekend trips must land on the SAME weekend as the outbound leg.
+      // Weekend trips must land on the same weekend as outbound.
       if (intent.weekend) {
         const nights = nightsBetween(out.date, r.date);
         return nights >= 1 && nights <= 4;
@@ -243,7 +204,7 @@ export interface AlertAlternatives {
   nearbyDates: Flight[]; // same search, date widened ±3 days
 }
 
-/** Honest alternatives when a search matches nothing. */
+/** Alternatives when a search matches nothing. */
 export const nearbyAlternatives = (
   rawFlights: Flight[],
   intent: IntentJSON,

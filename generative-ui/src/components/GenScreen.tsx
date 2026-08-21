@@ -7,44 +7,35 @@ import { Plane, CreditCard, Leaf, RefreshCw, AlertTriangle, Calendar, MapPin } f
 import { getCityName } from '../lib/airportMap';
 import { DATA_MAX } from '../constants/prompts';
 
-// "5 Aug 2026" — concise, no weekday, for the assumed-dates range badge.
 const formatRangeDate = (date: string): string =>
   new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-// The window an undated search actually covers: today through the last day in
-// the dataset. Derived from searchStartDate(), the same function the filter
-// bounds on, so the badge can never advertise a range the search did not use.
-// Called at render rather than module load so a tab left open overnight does
-// not keep quoting yesterday.
+// Assumed-dates badge: today..DATA_MAX via searchStartDate() (recomputed each render).
 const assumedDatesLabel = (): string =>
   `${formatRangeDate(searchStartDate())} – ${formatRangeDate(DATA_MAX)}`;
 
 type RefinePatch = Partial<IntentJSON & { layout?: string }>;
 
 interface GenScreenProps {
-  /** The user query this screen answers — shown as the breadcrumb tag */
+  /** User query shown as the screen headline */
   query: string;
   message: ChatMessage;
   onToggleExpand: (messageId: string) => void;
   onSelectFlight: (flight: Flight) => void;
-  /** Present only while idle: sends a fresh follow-up query (via the LLM) */
+  /** Idle-only: fresh follow-up via LLM */
   onQuickReply?: (text: string) => void;
-  /** Present only while idle: composes a refinement onto THIS view's intent */
+  /** Idle-only: refine onto this view's intent */
   onRefine?: (patch: RefinePatch, label: string) => void;
-  /** Present only while idle: re-runs the last query */
+  /** Idle-only: re-run last query */
   onRetry?: () => void;
 }
 
-// Contextual refinements, derived from what the last search did NOT constrain.
-// Each carries a structured patch so the click composes onto the current view's
-// intent (prior slots persist); the label is logged like a typed message.
+// Refine chips from unconstrained slots; patch composes onto current intent.
 const buildFollowUps = (message: ChatMessage): { label: string; patch: RefinePatch }[] => {
   if (!message.flights || message.flights.length === 0) return [];
   const intent = message.intent || {};
   const chips: { label: string; patch: RefinePatch }[] = [];
-  // The comparison template exists to show direct AND 1-stop side by side, so a
-  // "direct only" refinement would empty the 1-stop column and defeat it — omit
-  // that chip while this view is a comparison.
+  // Comparison needs both stop counts — omit "direct only" chip.
   const isComparison = (message.layout ?? intent.layout) === 'comparison';
   if (intent.stops == null && !isComparison) chips.push({ label: 'Only show direct flights', patch: { stops: 0 } });
   if (intent.max_price == null) chips.push({ label: 'Only flights under £100', patch: { max_price: 100 } });
@@ -53,8 +44,6 @@ const buildFollowUps = (message: ChatMessage): { label: string; patch: RefinePat
   return chips.slice(0, 3);
 };
 
-// Each layout claims its own footprint on the canvas — this is the visible
-// difference between "the AI rebuilt the screen" and "a chat column".
 const LAYOUT_WIDTHS: Record<string, string> = {
   highlight: 'max-w-2xl',
   comparison: 'max-w-5xl',
@@ -85,8 +74,7 @@ export const GenScreen: React.FC<GenScreenProps> = ({
     !isSystem && (layout === 'alert' || (message.flights && message.flights.length > 0));
   const followUps = onRefine && !isSystem ? buildFollowUps(message) : [];
 
-  // Live stats shown only under the plain grid layout (other layouts carry
-  // their own summaries). Plain loop: spread args crash on huge result sets.
+  // Grid-only stats; plain loop (Math.min(...arr) crashes on huge sets).
   const getStatsSummary = () => {
     if (layout !== 'grid' || !hasGenContent) return null;
     const flights = message.flights;
@@ -108,17 +96,12 @@ export const GenScreen: React.FC<GenScreenProps> = ({
 
   const stats = getStatsSummary();
 
-  // Date assumption: when the query named no date, the search spanned the whole
-  // dataset window. State that explicitly (mirrors how the origin is assumed to
-  // be London) so the user knows what range produced these results.
+  // Undated search → show assumed date range badge.
   const intent = message.intent ?? {};
   const noDates = !intent.date?.trim() && !intent.date_from?.trim() && !intent.date_to?.trim();
   const showDateAssumption = hasGenContent && layout !== 'alert' && noDates;
 
-  // Origin assumption: this dataset only departs London, so every result rests
-  // on that assumption — state it on EVERY layout rather than leaving the user
-  // to infer it from airport codes. On the destinations grid there are no codes
-  // shown at all, so without this the origin was entirely invisible.
+  // Dataset is London-only — state origin on every layout (esp. destinations grid).
   const showOriginAssumption = hasGenContent && layout !== 'alert';
   const originLabel = intent.origin_code?.trim()
     ? `${getCityName(intent.origin_code.trim())} (${intent.origin_code.trim().toUpperCase()})`
@@ -135,14 +118,13 @@ export const GenScreen: React.FC<GenScreenProps> = ({
   return (
     <div className="w-full px-4 md:px-8 py-6">
       {isSystem ? (
-        /* Connection/system errors take over the canvas as a centered notice */
+        /* System error notice */
         <div className="max-w-md mx-auto mt-10 bg-card border border-border rounded-lg p-5 flex gap-3 items-start">
           <AlertTriangle className="w-5 h-5 text-accent-amber shrink-0 mt-0.5" />
           <div className="text-left">
             <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider font-mono">Just a moment</h4>
             <p className="text-xs text-muted-foreground font-normal mt-1 leading-relaxed">{message.text}</p>
-            {/* Re-sends the same query, so the participant never has to retype
-                a task query the rate limiter swallowed. */}
+            {/* Re-send last query after a retryable failure */}
             {message.retryable && onRetry && (
               <button
                 type="button"
@@ -156,10 +138,9 @@ export const GenScreen: React.FC<GenScreenProps> = ({
           </div>
         </div>
       ) : hasGenContent ? (
-        /* The generative area, at the width this layout wants */
+        /* Generative area */
         <div className={`mx-auto w-full ${LAYOUT_WIDTHS[layout] ?? 'max-w-6xl'}`}>
-          {/* Query header — mono eyebrow + the user's words as the headline,
-              with the AI's one-line summary as a subtitle. */}
+          {/* Query header */}
           <div className="mb-6">
             <div className="text-[11px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">Query</div>
             {query && (
@@ -218,7 +199,7 @@ export const GenScreen: React.FC<GenScreenProps> = ({
             onRefine={onRefine}
           />
 
-          {/* Stats strip (grid layout only) */}
+          {/* Grid stats */}
           {stats && (
             <div className="flex flex-wrap gap-2 mt-4">
               <span className="inline-flex items-center gap-1.5 bg-muted border border-border rounded-full px-3.5 py-1.5 text-xs font-medium text-foreground">
@@ -237,7 +218,7 @@ export const GenScreen: React.FC<GenScreenProps> = ({
           )}
         </div>
       ) : (
-        /* Text-only guidance (too broad / off-topic / unknown destination) */
+        /* Text-only guidance */
         <div className="max-w-xl mx-auto mt-10">
           <div className="text-[11px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2">Query</div>
           {query && <h1 className="text-2xl md:text-3xl font-heading font-semibold text-foreground tracking-tight mb-3">{query}</h1>}
@@ -245,7 +226,7 @@ export const GenScreen: React.FC<GenScreenProps> = ({
         </div>
       )}
 
-      {/* Refine chips — part of the generated screen, not chat suggestions */}
+      {/* Refine chips */}
       {followUps.length > 0 && (
         <div className={`mx-auto w-full ${LAYOUT_WIDTHS[layout] ?? 'max-w-6xl'} mt-8 pt-5 border-t border-border`}>
           <div className="text-[11px] font-mono uppercase tracking-[0.15em] text-muted-foreground mb-2.5">
@@ -266,7 +247,7 @@ export const GenScreen: React.FC<GenScreenProps> = ({
         </div>
       )}
 
-      {/* Screen meta: which template rendered + regenerate */}
+      {/* Layout tag + regenerate */}
       {!isSystem && (
         <div className={`mx-auto w-full ${LAYOUT_WIDTHS[layout] ?? 'max-w-6xl'} mt-6 flex items-center gap-3 text-[10px] font-mono text-muted-foreground/60 select-none`}>
           {hasGenContent && <span>[{layout}]</span>}

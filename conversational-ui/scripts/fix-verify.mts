@@ -1,14 +1,6 @@
 /**
- * Verifies the QA fixes against the CSV using the app's REAL filter/slot code.
- *
- *   1. Task 3 carryover: a Rome comparison after an "after 6pm" turn must
- *      still see both stop types, and the synthesis must name the right ones.
- *   2. Weekend is a real filter: task-5 ("£150 + free weekend") results must
- *      all depart Fri/Sat/Sun.
- *   3. Task-4 cheapest weekend day is computed from the filtered set (Fri–Sun).
- *   4. Summary prose must restate the time window that was applied.
- *
- * Run from conversational-ui/:  npx tsx scripts/fix-verify.mts
+ * QA verify vs CSV (real filter/slots): carryover, weekend filter, cheapest day, prose.
+ * Run: npx tsx scripts/fix-verify.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -86,17 +86,8 @@ const cheapestIn = (groups: StopGroup[], stops: number): Flight | null =>
   groups.find((g) => g.stops === stops)?.flights[0] ?? null;
 
 /**
- * Direct vs connecting, with EVERY qualifying flight accounted for.
- *
- * This screen used to render exactly one direct and one connecting flight and
- * drop the rest without saying so — a participant who had seen six results
- * asked why only two were left. Flights are now grouped by stop count, fewest
- * stops first, cheapest first inside each group, with a per-group toggle once a
- * group runs past COMPARISON_PREVIEW_ROWS.
- *
- * The recommendation sits UNDER the groups rather than above them: the point of
- * a comparison screen is that the participant reads the options and then the
- * verdict, not a verdict they have to scroll past to check.
+ * Direct vs connecting, grouped by stops (cheapest first; expand past COMPARISON_PREVIEW_ROWS).
+ * Recommendation sits under the groups.
  */
 export const ComparisonView: React.FC<{
   flights: Flight[];
@@ -105,8 +96,7 @@ export const ComparisonView: React.FC<{
   const groups = groupByStops(flights);
   if (groups.length === 0) return null;
 
-  // The verdict compares the cheapest of each kind — the two flights someone
-  // choosing on price would actually be weighing against each other.
+  // Verdict compares the cheapest direct vs cheapest one-stop.
   const direct = cheapestIn(groups, 0);
   const oneStop = cheapestIn(groups, 1);
 

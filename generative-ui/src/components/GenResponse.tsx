@@ -16,28 +16,19 @@ import { MultiLegView } from './layouts/MultiLegView';
 import { ReturnGroupedView } from './layouts/ReturnGroupedView';
 import { isTwoWayResult } from '../lib/returnGroups';
 
-/**
- * Layouts that do NOT render a flat list of individual flights, so a merged
- * round-trip result set cannot confuse the two legs inside them: the aggregate
- * views summarise across dates or destinations rather than listing rows, alert
- * is the zero-result state, and itinerary already presents an outbound/return
- * pair with each leg labelled.
- */
+/** Layouts that don't show a flat flight list (no interleaved round-trip confusion). */
 const LEG_SAFE_LAYOUTS = new Set(['calendar', 'destinations', 'map', 'trend', 'alert']);
 
 interface GenResponseProps {
   message: ChatMessage;
   onToggleExpand: (messageId: string) => void;
   onSelectFlight: (flight: Flight) => void;
-  /** Fresh follow-up query through the LLM (used by the zero-result alert) */
+  /** Fresh follow-up via LLM (zero-result alert) */
   onQuickReply?: (text: string) => void;
-  /** Compose a refinement onto this view's intent (drill-in chips) */
+  /** Refine onto this view's intent (drill-in chips) */
   onRefine?: (patch: Partial<IntentJSON & { layout?: string }>, label: string) => void;
 }
 
-// The generative step: one dispatcher, twelve templates. The layout was
-// chosen by the model, validated, and possibly overridden (alert / fallback)
-// in useGenChat — by the time we're here it is always renderable.
 export const GenResponse: React.FC<GenResponseProps> = ({
   message,
   onToggleExpand,
@@ -49,11 +40,7 @@ export const GenResponse: React.FC<GenResponseProps> = ({
   const intent = message.intent ?? {};
   const layout = message.layout ?? 'grid';
 
-  // A round trip handed to any list layout arrives as one price-sorted array
-  // with both legs interleaved, and nothing in those layouts says which row
-  // flies which way. Group and label the legs instead. The itinerary layout is
-  // exempt only when it actually has a pair to show — its fallback is the flat
-  // carousel, which has the same problem.
+  // Round-trip list layouts interleave legs — group/label unless itinerary has a pair.
   const isRoundTrip = isTwoWayResult(intent) && flights.length > 0;
   const hasLabelledPair = layout === 'itinerary' && Boolean(message.itinerary);
   if (isRoundTrip && !LEG_SAFE_LAYOUTS.has(layout) && !hasLabelledPair) {
@@ -103,7 +90,6 @@ export const GenResponse: React.FC<GenResponseProps> = ({
       );
     case 'grid':
     default:
-      // The proven conversational-UI presentation, reused wholesale
       return (
         <FlightCarousel
           flights={flights}

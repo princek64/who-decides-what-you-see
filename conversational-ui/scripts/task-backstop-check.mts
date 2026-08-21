@@ -1,9 +1,5 @@
 /**
- * Offline checks for the study-task wording backstops (no Groq calls).
- *
- * Covers: user-stated date/price/time winning over bad model slots, compare
- * forcing direct_only null, widened direct detection, flexible 3-month
- * windows, and same-thread city resets so Task 2 does not keep Task 1's city.
+ * Offline study-task wording backstops (dates/price/compare/direct/windows/city).
  */
 import {
   applyWordingBackstops,

@@ -1,19 +1,7 @@
 /**
- * Reproduction harness for the five bugs found in the live multi-turn session:
- *
- *   "Compare direct vs connecting to Rome on 7 August" -> "Only show direct
- *   flights" -> "Sort them by fastest" -> "find a flight for 10th august
- *   instead" -> "rome" -> "under 25" -> "for sevilla for same date?" ->
- *   "Seville?"
- *
- * Bugs 1-3 and the Seville/Sevilla question are DETERMINISTIC (pure slot +
- * filter code), so they are reproduced here with no LLM round-trip at all —
- * every number is recomputed from the real CSV. Bug 4 (multi-turn carryover)
- * needs the model, so it lives in pipeline-test.mts's MT cases.
- *
- * Run from conversational-ui/:  npx tsx scripts/session-bugs-repro.mts
- *
- * Exit code 0 = every bug is FIXED, 1 = at least one still reproduces.
+ * Deterministic repro of live multi-turn session bugs (slots + CSV; no LLM).
+ * Multi-turn carryover lives in pipeline-test.mts. Exit 0 = fixed.
+ * Run: npx tsx scripts/session-bugs-repro.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -1,14 +1,5 @@
 /**
- * Offline check that the assistant's own closing offers are ACTIONABLE
- * (no Groq calls).
- *
- * The answer now ends with "Want me to narrow it to direct flights only,
- * include flights with a stop, …?" — if the participant types that back and the
- * slot pipeline ignores it, they get a byte-identical answer, which is exactly
- * what happened before the wording backstops existed. Each case pairs the
- * user's wording with the slot the 8B model actually returns for it (an empty
- * slot: it names no destination, no dates, no flags) and asserts the resolved
- * slot changed the search.
+ * Offline: closing-offer wordings must resolve via backstops (empty model slots).
  */
 import { applyWordingBackstops, resolveTurnSlot, slotToIntent } from '../src/lib/slots';
 import type { SlotJSON } from '../src/lib/slots';

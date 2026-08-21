@@ -1,7 +1,6 @@
 /**
- * OFFLINE check (no Groq) for the follow-up-chip composition fix: a chip patch
- * merged onto the prior answer's slot must preserve every earlier constraint.
- * Run from conversational-ui/:  npx tsx scripts/refine-test.mts
+ * Offline: chip refine must preserve prior slot constraints.
+ * Run: npx tsx scripts/refine-test.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

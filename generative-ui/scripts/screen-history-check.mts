@@ -1,14 +1,5 @@
 /**
- * Offline check of the screen-history behaviour (no Groq calls).
- *
- * Walks the scripted test sequence through the SAME functions the hook and the
- * canvas use — placeScreen decides append-vs-replace, visibleHistory decides
- * what sits above the current screen — so the assertions cover the real rule
- * rather than a restatement of it.
- *
- *   1. search Barcelona 16 Oct
- *   2. "show me only direct flights"      -> updates in place, no history entry
- *   3. "what about Rome November 15th"    -> Barcelona collapses into history
+ * Offline screen history: placeScreen / visibleHistory (in-place refine vs new search).
  */
 import fs from 'node:fs';
 import path from 'node:path';

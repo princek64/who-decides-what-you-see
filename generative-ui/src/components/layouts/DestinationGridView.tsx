@@ -3,9 +3,7 @@ import type { Flight, IntentJSON } from '../../hooks/useFlightFilter';
 import { summarizeDestinations } from '../../lib/layoutData';
 import { MapPin, Leaf } from 'lucide-react';
 
-// City cards for open "where can I go" questions. Clicking a city composes a
-// destination onto the current view's intent (preserving budget, dates and any
-// other filters) and drills into the grid — logged like a normal message.
+// City cards for open "where can I go"; click drills in preserving other filters.
 export const DestinationGridView: React.FC<{
   flights: Flight[];
   intent: IntentJSON;
@@ -29,8 +27,7 @@ export const DestinationGridView: React.FC<{
             key={d.code}
             type="button"
             onClick={() =>
-              // Picking a city from an open/budget search means going there and
-              // back, so drill in with both directions rather than one-way only.
+              // Open/budget pick → round-trip drill-in.
               onRefine?.(
                 { dest_city: d.city, dest_code: undefined, direction: 'both', layout: 'grid' },
                 `Flights to ${d.city}`

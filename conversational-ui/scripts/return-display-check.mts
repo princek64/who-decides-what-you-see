@@ -1,11 +1,5 @@
 /**
- * Offline check of the round-trip display (no Groq calls).
- *
- * The bug: filterAndSortFlights merges the outbound and inbound results into
- * one price-sorted array, so a flat render interleaves London → Paris and
- * Paris → London rows with nothing saying which is which. These assertions pin
- * the fix — two labelled groups, correct direction in each, a combined trip
- * total — and pin that a one-way search is left exactly as it was.
+ * Offline round-trip display: two labelled groups + trip total; one-way unchanged.
  */
 import fs from 'node:fs';
 import path from 'node:path';

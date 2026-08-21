@@ -1,8 +1,6 @@
 /**
- * Offline checks for generative same-thread city reset + study local intents.
- * No network.
- *
- * Run from generative-ui/:  npx tsx scripts/city-carry-check.mts
+ * Offline: same-thread city reset + study local intents.
+ * Run: npx tsx scripts/city-carry-check.mts
  */
 import {
   applyIntentBackstops,

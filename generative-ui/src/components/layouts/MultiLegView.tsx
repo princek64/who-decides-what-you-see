@@ -5,9 +5,7 @@ import { getCityName } from '../../lib/airportMap';
 import { FlightRow, formatRowDate } from './FlightRow';
 import { PlaneTakeoff, PlaneLanding, Clock } from 'lucide-react';
 
-// Connection-focused view: each leg as a step, layover front and center.
-// The dataset stores one row per journey with a layover summary string —
-// per-leg times are not in the data, so none are invented here.
+// Connection view: steps + layover. Per-leg times are not in the dataset.
 export const MultiLegView: React.FC<{
   flights: Flight[];
   onSelectFlight: (f: Flight) => void;

@@ -1,11 +1,4 @@
-/**
- * Wording backstops + same-thread intent merge for generative-ui.
- *
- * Conversational-ui already had these guards (typed city wins, new city =
- * fresh search, open explore clears prior city). Generative only filled
- * blank dates on return-leg wording and trusted Groq + the last three user
- * messages — so Task 2/3 in the same chat often kept showing Barcelona.
- */
+/** Wording backstops + same-thread intent merge (parity with conversational-ui). */
 
 import type { IntentJSON } from '../hooks/useFlightFilter';
 import { DATA_MAX, getSearchAnchor } from '../constants/prompts';
@@ -18,15 +11,7 @@ import {
 
 export type GenIntent = IntentJSON & { layout?: string };
 
-/**
- * Destination named, no dates given — ask rather than silently searching the
- * whole remaining dataset window. Mirrors conversational-ui's
- * firstMissingRequiredSlot('dates') policy so a mid-task refinement that drops
- * the date cannot diverge between interfaces (ask vs search-all).
- *
- * Open explore (no city / destinations|map with no dest) is exempt: undated
- * budget/anywhere searches are intentional.
- */
+/** Dest set, dates empty → ask (same undated policy as conversational-ui). Open explore exempt. */
 export const needsDatesClarification = (intent: GenIntent): boolean => {
   const hasDest = Boolean(intent.dest_city?.trim() || intent.dest_code?.trim());
   if (!hasDest) return false;
@@ -36,7 +21,7 @@ export const needsDatesClarification = (intent: GenIntent): boolean => {
   return !hasDates;
 };
 
-/** Same wording as conversational-ui datesQuestionFor for one-way vs round-trip. */
+/** Same wording as conversational-ui datesQuestionFor. */
 export const datesQuestionFor = (intent: GenIntent): string =>
   intent.direction === 'both' || intent.weekend
     ? 'Which dates? A single day shows flights both ways — or give an outbound and return date, like "30 August out, 3 September back."'
@@ -178,7 +163,7 @@ const windowLooksCollapsed = (
   return span < Math.min(60, want * 0.5);
 };
 
-/** Prefer facts the user typed over whatever the model invented or dropped. */
+/** Prefer typed facts over model invent/drop. */
 export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent => {
   const next: GenIntent = { ...intent };
 
@@ -223,7 +208,7 @@ export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent
     next.date_from = window.date_from;
     next.date_to = window.date_to;
   } else if (day) {
-    // User-stated concrete day wins over a wrong model date (July echo, etc.).
+    // Typed concrete day wins over a wrong model date.
     next.date = day;
     delete next.date_from;
     delete next.date_to;
@@ -237,10 +222,7 @@ export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent
     next.direction = 'return';
   } else if (isRoundTripQuery(text)) {
     next.direction = 'both';
-    // Return-trip users need a paired itinerary. A price calendar of outbound
-    // days (with same-day return lock) caused abandonments in live sessions.
-    // Scripted "cheapest weekend return" study tasks still force calendar via
-    // studyParisWeekend; free round-trip wording goes to itinerary.
+    // Free round-trip → itinerary; studyParisWeekend still forces calendar.
     if (!isCompareQuery(text)) {
       next.layout = 'itinerary';
     }
@@ -257,10 +239,7 @@ export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent
 
   if (!next.sort_by) next.sort_by = 'cheapest';
 
-  // Destination / map / budget cards group by dest_code. Return legs land in
-  // London, so direction "both"/"return" would surface Heathrow/Gatwick cards
-  // as if they were places to fly to. Force outbound when the layout is still
-  // exploratory and no city is named (runs after round-trip→itinerary).
+  // Exploratory layouts group by dest_code — force outbound so London returns aren't cards.
   const exploratoryLayout =
     next.layout === 'destinations' || next.layout === 'map' || next.layout === 'budget';
   if (exploratoryLayout && !next.dest_city && !next.dest_code) {
@@ -291,10 +270,7 @@ export const isEasternEuropeQuery = (text: string): boolean =>
   /\bcountries?\s+east(?:ern)?\s+of\s+germany\b/i.test(text) ||
   /\beast\s+of\s+germany\b/i.test(text);
 
-/**
- * Same-thread merge: a newly named city (or open explore) is a fresh search
- * and must not keep prior-task filters the current message did not restate.
- */
+/** Same-thread merge: new city / open explore must not keep unstated prior filters. */
 export const resolveTurnIntent = (
   prev: GenIntent | null,
   incoming: GenIntent,
@@ -345,8 +321,7 @@ export const resolveTurnIntent = (
     return next;
   }
 
-  // "restrict / only / narrow" without a new city — compose onto the prior
-  // search instead of starting a blank slot-fill.
+  // Scope refine without a new city — compose onto prior search.
   const scopeRefine =
     prev &&
     !destinationFromText(text) &&
@@ -392,7 +367,7 @@ export const resolveTurnIntent = (
       explore.date_from = window.date_from;
       explore.date_to = window.date_to;
     } else if (prev && (prev.date_from || prev.date_to || prev.date)) {
-      // Region refine keeps prior window so we don't re-ask / re-default.
+      // Region refine keeps prior window.
       if (prev.date) explore.date = prev.date;
       if (prev.date_from) explore.date_from = prev.date_from;
       if (prev.date_to) explore.date_to = prev.date_to;
@@ -470,8 +445,7 @@ const studyAmsterdam = (text: string): GenIntent | null => {
   if (price == null && after == null) return null;
   if (!/\b(?:one[\s-]?way|flight|flights|fly|flying)\b/i.test(text)) return null;
   const day = dateFromText(text);
-  // Date optional in wording — when absent, leave date empty so useGenChat
-  // asks (needsDatesClarification) rather than searching the whole window.
+  // No date in wording → leave empty so useGenChat asks (needsDatesClarification).
   const intent: GenIntent = {
     dest_city: 'Amsterdam',
     direction: 'outbound',
@@ -552,10 +526,7 @@ export const matchStudyTaskIntent = (text: string): GenIntent | null => {
   );
 };
 
-/**
- * Local-first intent when wording is enough — skips Groq for study tasks and
- * most clear city/date / explore turns.
- */
+/** Local-first intent when wording is enough — skips Groq. */
 export const tryLocalIntent = (text: string, hasPrevious = false): GenIntent | null => {
   const t = text.trim();
   if (!t || looksOffTopic(t)) return null;
@@ -563,7 +534,7 @@ export const tryLocalIntent = (text: string, hasPrevious = false): GenIntent | n
   const study = matchStudyTaskIntent(t);
   if (study) {
     const next = applyIntentBackstops(study, t);
-    // Study-task layouts are authoritative (e.g. T4 cheapest-weekend calendar).
+    // Study-task layouts are authoritative.
     if (study.layout) next.layout = study.layout;
     return next;
   }

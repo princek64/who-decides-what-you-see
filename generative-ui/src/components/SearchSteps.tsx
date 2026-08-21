@@ -13,13 +13,7 @@ const STEPS: { key: string; label: string }[] = [
   { key: 'searching', label: 'Searching flights' },
 ];
 
-/**
- * The steps the app is working through, shown before the generated screen
- * appears (see SEARCH_STEP_MS in useGenChat) so the participant sees the
- * search happen rather than a layout blinking in. Same steps and wording as
- * TypingIndicator in the conversational app — only the layout is generated
- * differently between the two conditions, not the search itself.
- */
+/** Pre-screen progress steps (see SEARCH_STEP_MS); same wording as conversational TypingIndicator. */
 export const SearchSteps: React.FC<SearchStepsProps> = ({ phase, compact = false }) => {
   const currentIndex = STEPS.findIndex((s) => s.key === phase);
 

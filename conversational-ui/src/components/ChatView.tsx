@@ -8,8 +8,7 @@ import { PlaneTakeoff, Search, ChevronDown, Trash2 } from 'lucide-react';
 import { FlightSketchLogo } from './FlightSketchLogo';
 import { buildSearchingStatus } from '../lib/searchingStatus';
 
-// Stable module-level reference — an inline array literal as the hook's
-// `examples` prop would recreate on every render and restart the animation.
+// Stable module-level — inline array as hook prop would restart the animation each render.
 const SEARCH_EXAMPLES = [
   'Cheapest direct one-way to Barcelona on 16 October 2026',
   'Compare direct vs one-stop to Lisbon on 15 November 2026',
@@ -31,8 +30,7 @@ export const ChatView: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [isComposerFocused, setIsComposerFocused] = useState(false);
 
-  // Animated placeholder runs only while the composer is empty, unfocused,
-  // and not mid-search — a focused-or-typed-in input is "normal," not a demo.
+  // Animated placeholder only while empty, unfocused, and not mid-search.
   const typewriterActive = inputText === '' && !isComposerFocused && !isLoading;
   const { text: typedExample, showCaret } = useTypewriterPlaceholder({
     examples: SEARCH_EXAMPLES,
@@ -47,16 +45,7 @@ export const ChatView: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messageRefs = useRef(new Map<string, HTMLDivElement>());
 
-  // ─── Anchored scrolling (ChatGPT pattern) ────────────────────────────────
-  // A new turn does NOT scroll to the bottom of the feed: the new user query is
-  // pulled to the TOP of the viewport and the previous answer scrolls away, so
-  // each exchange starts on a clean screen. Once the answer arrives it is read
-  // from its first line — either straight under the query (when the whole
-  // exchange fits) or from the answer's own top when it doesn't.
-  //
-  // That is only possible if there is something to scroll INTO, hence the
-  // spacer below the thread: it is exactly the gap needed to lift the anchor to
-  // the top, and collapses to 0 once the conversation is tall enough on its own.
+  // Anchored scroll: new user query to top of viewport; spacer fills the gap.
   const SCROLL_PAD = 16;
   const [spacer, setSpacer] = useState(0);
   const spacerRef = useRef(0);
@@ -64,7 +53,6 @@ export const ChatView: React.FC = () => {
   const lastMessage = messages[messages.length - 1];
   const lastUserId = [...messages].reverse().find((m) => m.role === 'user')?.id;
 
-  // Which element the viewport should start at, and how much filler that needs.
   const measureAnchor = () => {
     const container = chatContainerRef.current;
     const thread = threadRef.current;
@@ -74,16 +62,11 @@ export const ChatView: React.FC = () => {
     if (!userEl) return null;
 
     const topOf = (el: HTMLElement) => el.offsetTop - thread.offsetTop;
-    // Height of the CONVERSATION only. Measured from the zero-height marker
-    // that sits between the last turn and the spacer, never from the thread's
-    // own scrollHeight: that includes the spacer, so the spacer would feed its
-    // own next value, the two would chase each other every commit, and the
-    // re-render storm cancelled the scroll before any frame could run it.
+    // Content height from zero-height marker — never thread.scrollHeight (includes spacer).
     const contentHeight = topOf(end);
     const room = container.clientHeight - SCROLL_PAD;
 
-    // Anchor on the query; fall back to the reply when the exchange is taller
-    // than one screen, so the answer is still read from its first line.
+    // Anchor on query; fall back to reply when the exchange is taller than one screen.
     let anchorEl: HTMLElement = userEl;
     if (contentHeight - topOf(userEl) > room) {
       const replyEl =
@@ -95,7 +78,7 @@ export const ChatView: React.FC = () => {
     return { anchorEl, needed: Math.max(0, room - (contentHeight - topOf(anchorEl))) };
   };
 
-  // Size the spacer first (layout), then scroll to the anchor.
+  // Size spacer first (layout), then scroll to anchor.
   useLayoutEffect(() => {
     const measured = measureAnchor();
     if (!measured) return;
@@ -111,11 +94,8 @@ export const ChatView: React.FC = () => {
     if (!container) return;
     const measured = measureAnchor();
     if (!measured) return;
-    // Runs straight away rather than inside requestAnimationFrame: a background
-    // tab never fires animation frames, so a deferred scroll would simply never
-    // happen. The spacer is already applied by the layout effect above, so the
-    // geometry read here is final.
-    // Rect-based, so container padding and nested offsetParents cannot skew it.
+    // Immediate scroll (not rAF): background tabs never fire animation frames.
+    // Rect-based so padding / nested offsetParents cannot skew it.
     const delta =
       measured.anchorEl.getBoundingClientRect().top -
       container.getBoundingClientRect().top -
@@ -123,19 +103,15 @@ export const ChatView: React.FC = () => {
     if (Math.abs(delta) < 1) return;
     container.scrollTo({
       top: Math.max(0, container.scrollTop + delta),
-      // A hidden tab never animates a smooth scroll, so the thread would still
-      // be at the old position when the participant switches back. Jump there
-      // instead; only a visible tab gets the animation.
+      // Hidden tab never animates smooth scroll — jump so position is correct on return.
       behavior: document.hidden ? 'auto' : 'smooth',
     });
   }, [messages, isLoading, spacer]);
 
-  // Focus the composer once the app is ready (and keep focus after sending)
   useEffect(() => {
     if (!csvLoading) textareaRef.current?.focus();
   }, [csvLoading]);
 
-  // Grow the composer with its content, capped at ~5 lines
   const resizeTextarea = () => {
     const el = textareaRef.current;
     if (!el) return;
@@ -146,8 +122,7 @@ export const ChatView: React.FC = () => {
   const handleScroll = () => {
     const el = chatContainerRef.current;
     if (!el) return;
-    // The spacer is empty room, not unread conversation — don't count it, or the
-    // floater would sit there permanently after every anchored scroll.
+    // Spacer is empty room — exclude it or the floater stays permanently.
     setShowScrollDown(el.scrollHeight - spacerRef.current - el.scrollTop - el.clientHeight > 300);
   };
 
@@ -166,7 +141,7 @@ export const ChatView: React.FC = () => {
     submitMessage();
   };
 
-  // Enter sends; Shift+Enter inserts a newline (ChatGPT/Claude convention)
+  // Enter sends; Shift+Enter inserts a newline
   const handleComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -174,14 +149,12 @@ export const ChatView: React.FC = () => {
     }
   };
 
-  // The newest assistant message is the one whose origin picker stays live
   const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id;
   const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.text;
   const searchingLabel = buildSearchingStatus(lastUserText ?? '');
-  // A rate-limit notice is only actionable while it is the newest thing said.
+  // Rate-limit notice is only actionable while it is the newest message.
   const lastMessageId = messages[messages.length - 1]?.id;
-  // When we are asking for a slot, hide prior result tables so the clarifying
-  // question is not buried under the previous search answer.
+  // Hide prior result tables while asking for a slot.
   const suppressStaleResults = Boolean(
     [...messages].reverse().find((m) => m.role === 'assistant' && m.awaitingSlot)
   );
@@ -202,13 +175,7 @@ export const ChatView: React.FC = () => {
         </Button>
       )}
 
-      {/* Composer pill: auto-growing textarea with the send button inside —
-          same border/pill treatment, leading icon, and vertical rhythm as
-          generative-ui's search bar. min-h-12 (not h-12) gives it the exact
-          same resting height while still letting it grow for multi-line
-          messages; the textarea itself carries no padding of its own so
-          there is only one source of vertical spacing, same as generative-ui's
-          input. */}
+      {/* Composer pill: auto-growing textarea; match generative-ui search bar rhythm. */}
       <div className="flex-1 flex items-center gap-2 bg-white/[0.02] border border-input rounded-full pl-4 pr-1.5 min-h-12 hover:border-white/40 focus-within:border-white/45 focus-within:ring-2 focus-within:ring-ring/40 transition-colors min-w-0">
         <Search className="w-4 h-4 text-muted-foreground shrink-0" />
         <div className="relative flex-1 min-w-0 flex items-center">
@@ -233,9 +200,7 @@ export const ChatView: React.FC = () => {
             aria-label="Message Flight Assistant"
             className="w-full resize-none bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground max-h-[132px]"
           />
-          {/* Animated demo placeholder — purely decorative (aria-hidden), so
-              it never reaches screen readers or steals focus/typing from the
-              real textarea underneath. */}
+          {/* Decorative demo placeholder (aria-hidden) — does not steal focus. */}
           {typewriterActive && (
             <div
               aria-hidden="true"
@@ -285,7 +250,6 @@ export const ChatView: React.FC = () => {
         </button>
       </header>
 
-      {/* CSV Database Loading Screen */}
       {csvLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center bg-background p-6">
           <div className="w-24 h-24 rounded-full border border-dashed border-border flex items-center justify-center overflow-hidden bg-muted relative">
@@ -299,8 +263,6 @@ export const ChatView: React.FC = () => {
           : "flex-1 flex flex-col min-h-0"
         }>
 
-          {/* 1. Empty state: headline above the centred composer. Or the
-                 message feed once the thread has started. */}
           {messages.length === 0 ? (
             <div className="text-center mb-8 w-full">
               <h2 className="text-3xl md:text-4xl font-heading font-semibold text-foreground tracking-tight">
@@ -314,8 +276,6 @@ export const ChatView: React.FC = () => {
                 onScroll={handleScroll}
                 className="h-full overflow-y-auto px-4 py-4 md:px-8 w-full"
               >
-                {/* One continuous thread: turns are separated by their own
-                    padding, never by cards or dividers. */}
                 <div ref={threadRef} className="max-w-4xl mx-auto">
                   {messages.map((message) => {
                     const isLastAssistant = message.id === lastAssistantId;
@@ -360,7 +320,6 @@ export const ChatView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Scroll-to-bottom floater (ChatGPT-style) */}
               {showScrollDown && (
                 <button
                   type="button"
@@ -374,7 +333,6 @@ export const ChatView: React.FC = () => {
             </div>
           )}
 
-          {/* 2. Reused Form Input Container */}
           <div className={messages.length === 0
             ? "w-full"
             : "bg-background border-t border-border p-4 pb-3 sticky bottom-0 z-10 w-full"
@@ -392,8 +350,6 @@ export const ChatView: React.FC = () => {
         </div>
       )}
 
-      {/* No flight detail dialog: everything the answer knows is already in the
-          text, so a flight in the thread is not clickable. */}
     </div>
   );
 };

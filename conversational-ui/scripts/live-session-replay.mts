@@ -1,10 +1,6 @@
 /**
- * Replays the EXACT eight-turn session the bugs were found in, end to end,
- * against the real model and the real CSV — typed turns go through Groq, chip
- * turns through the same slot merge refineView performs. Prints what the
- * participant would now see on each turn.
- *
- * Run from conversational-ui/:  npx tsx scripts/live-session-replay.mts
+ * Live eight-turn session replay (Groq + CSV); prints per-turn output.
+ * Run: npx tsx scripts/live-session-replay.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

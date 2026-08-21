@@ -1,15 +1,7 @@
 /**
- * End-to-end test of the chat pipeline against the 5 research tasks.
- * Uses the app's REAL system prompt and REAL filter/slot code (imported below),
- * calling the same Groq model the app uses. Run from conversational-ui/:
- *   npx tsx scripts/pipeline-test.mts
- *
- * NOTE: the app now uses explicit slot-filling. A search only runs when a
- * destination AND at least one date are present; otherwise the app asks a
- * single follow-up ("Where are you flying to?" / "Which dates?"). Task-2 and
- * Task-5 wordings that omit those slots therefore land on an "ask-*" branch —
- * the test asserts the slots are still extracted so the follow-up answer will
- * search correctly.
+ * E2E chat pipeline vs 5 research tasks (real prompt/slots + live Groq).
+ * Incomplete slots assert ask-* branches still extract correctly.
+ * Run: npx tsx scripts/pipeline-test.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -6,13 +6,7 @@ interface TypingIndicatorProps {
   label: string;
 }
 
-/**
- * In-thread search status — one fading line, like ChatGPT's retrieval
- * indicator. No multi-step "Understanding…" checklist: the query is already
- * visible above, so the only thing worth saying is what is being searched.
- * useChat holds this on screen for a minimum window so local searches don't
- * flash past before the fade is readable.
- */
+/** In-thread search status — one fading line; held briefly so local searches stay readable. */
 export const TypingIndicator: React.FC<TypingIndicatorProps> = ({ label }) => {
   const text = label.trim() || 'Searching flights';
 

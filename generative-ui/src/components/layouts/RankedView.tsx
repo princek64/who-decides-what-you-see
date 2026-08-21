@@ -3,8 +3,7 @@ import type { Flight } from '../../hooks/useFlightFilter';
 import { rankFlights } from '../../lib/layoutData';
 import { FlightRow } from './FlightRow';
 
-// Numbered top-5 with a plain-English "why" tag per row. The ranking is a
-// transparent client-side heuristic (price + duration blend), not the LLM.
+// Numbered top-5 with a "why" tag; client-side price+duration heuristic.
 export const RankedView: React.FC<{
   flights: Flight[];
   onSelectFlight: (f: Flight) => void;

@@ -31,18 +31,13 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   text: string;
-  /** The user query this screen answers. Recorded on the screen itself so a
-   *  superseded screen can still label itself in the history stack — walking
-   *  back through `messages` for the nearest preceding user message stops
-   *  working once a screen is refined in place, since the refinement's own
-   *  query is appended after it. */
+  /** Query that produced this screen (needed after in-place refine; scan-back fails). */
   query?: string;
   intent?: IntentJSON & { layout?: string };
-  /** Set on a system message the user can simply re-send (rate limit / 5xx),
-   *  as opposed to one that needs the researcher (bad API key). */
+  /** System message is re-sendable (rate limit / 5xx), not a setup failure. */
   retryable?: boolean;
   flights?: Flight[];
-  /** Which template actually rendered (post-validation, post-fallback) */
+  /** Template actually rendered (post-validation / fallback). */
   layout?: Layout;
   itinerary?: ItineraryPair | null;
   alternatives?: AlertAlternatives;
@@ -50,25 +45,20 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-// Initialize Groq client using browser-compatible config
+// Browser Groq client (API key via Vite env).
 const groq = new Groq({
   apiKey: import.meta.env.VITE_GROQ_API_KEY,
   dangerouslyAllowBrowser: true,
 });
 
-/** How long the "searching flights" step is shown before the generated screen
- *  appears. The filter itself is instant; the pause makes the search visible
- *  instead of results materialising the moment the user hits enter. Identical
- *  to SEARCH_STEP_MS in the conversational app, so perceived latency is not a
- *  difference between the two conditions. */
+/** Artificial search pause so results don't appear instantly (matches conversational-ui). */
 const SEARCH_STEP_MS = 900;
 
 export const useGenChat = () => {
   const [flights, setFlights] = useState<Flight[]>([]);
   const [csvLoading, setCsvLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  /** Which step the progress indicator is showing: parsing the request
-   *  ('thinking') or running the search over the dataset ('searching'). */
+  /** Progress step: 'thinking' (parse) or 'searching' (filter). */
   const [loadingPhase, setLoadingPhase] = useState<'thinking' | 'searching'>('thinking');
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -76,10 +66,7 @@ export const useGenChat = () => {
 
   const { logUserMessage, logAiResponse, logShowAllResults } = useSessionLogger();
 
-  // The dataset is fetched and parsed ONCE per page load by loadFlightData;
-  // this effect only subscribes to the result. StrictMode's second effect run
-  // in development therefore re-uses the same request instead of issuing a
-  // second 35 MB download.
+  // loadFlightData is once-per-page-load; StrictMode remount reuses the same request.
   useEffect(() => {
     let cancelled = false;
     setCsvLoading(true);
@@ -101,8 +88,7 @@ export const useGenChat = () => {
     };
   }, []);
 
-  // "18:00" -> "6pm", "09:30" -> "9:30am", so a time constraint is restated in
-  // the same idiom the user asked in.
+  // "18:00" -> "6pm" for reply copy.
   const clockLabel = (hhmm: string): string => {
     const [hRaw, mRaw] = hhmm.split(':');
     const h = parseInt(hRaw, 10);
@@ -122,7 +108,6 @@ export const useGenChat = () => {
     return '';
   };
 
-  // Layout-aware search summaries
   const generateNaturalReply = (intent: IntentJSON, count: number, layout: Layout) => {
     if (count === 0 && layout === 'alert') {
       return 'No flights matched that exactly — here are the closest alternatives I could find.';
@@ -131,9 +116,7 @@ export const useGenChat = () => {
     const destination = intent.dest_city || intent.dest_code;
     const destInfo = destination ? ` to ${destination}` : '';
     const priceInfo = intent.max_price ? ` under £${intent.max_price}` : '';
-    // Every constraint we actually applied must appear in the sentence, so the
-    // stated answer matches the filtered set (the departure-time window and the
-    // weekend restriction used to be applied but never mentioned).
+    // Mention every applied constraint so the reply matches the filtered set.
     const timeInfo = describeTimeWindow(intent.departure_after, intent.departure_before);
     const weekendInfo = intent.weekend ? ' departing at the weekend' : '';
     let dateInfo = '';
@@ -143,9 +126,7 @@ export const useGenChat = () => {
       if (intent.date_from === intent.date_to) {
         dateInfo = ` on ${formatFlightDate(intent.date_from)}`;
       } else if (isRoundTripItinerary(intent)) {
-        // Two close-together dates on a round trip are an outbound/return
-        // pair, not a flexible window — say so plainly rather than "between
-        // X and Y".
+        // Close round-trip dates are out/return, not a flexible window.
         dateInfo = ` — outbound ${formatFlightDate(intent.date_from)}, return ${formatFlightDate(intent.date_to)}`;
       } else {
         dateInfo = ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
@@ -167,7 +148,6 @@ export const useGenChat = () => {
     }
   };
 
-  // True when the intent contains at least one real search constraint.
   const hasSearchConstraints = (intent: IntentJSON): boolean => {
     return Boolean(
       intent.origin_code?.trim() ||
@@ -201,11 +181,7 @@ export const useGenChat = () => {
       }));
 
     const systemPrompt = buildSystemPrompt();
-    // See the matching note in conversational-ui's useChat. The system prompt
-    // is the cacheable prefix and must stay byte-identical across calls,
-    // including retries, so the strict-retry instruction gets its own message
-    // rather than being appended onto the prefix. userHistory stays after it:
-    // it varies per turn, so it can only ever sit outside the cached span.
+    // System prompt must stay byte-identical (cache prefix); STRICT_RETRY is a separate message.
     const messagesPayload = [
       { role: 'system' as const, content: systemPrompt },
       ...(isRetry ? [{ role: 'system' as const, content: STRICT_RETRY_PROMPT }] : []),
@@ -217,26 +193,16 @@ export const useGenChat = () => {
       model: 'openai/gpt-oss-20b',
       messages: messagesPayload,
       temperature: 0.1,
-      // Headroom, not a target — see the matching note in conversational-ui's
-      // useChat. Unused ceiling is free; a truncated object is a guaranteed
-      // parse failure.
+      // Headroom (unused tokens free); truncated JSON is a guaranteed parse failure.
       max_tokens: 800,
-      // See the matching note in conversational-ui's useChat: gpt-oss-20b
-      // spends reasoning tokens out of max_tokens, and at default effort it
-      // exhausted this 300-token budget before emitting any JSON. Low effort
-      // keeps reasoning small enough that the layout JSON always fits.
+      // gpt-oss-20b spends reasoning from max_tokens; low effort leaves room for JSON.
       reasoning_effort: 'low',
     });
 
     return completion.choices[0]?.message?.content ?? '';
   };
 
-  // Both research apps share ONE org-level Groq quota, so a 429 mid-session is
-  // routine rather than exceptional — and a participant seeing a raw "could not
-  // reach the AI service" alert loses the thread of the task. Wait out the
-  // window the API names and try again (twice), then say something useful.
-  // Identical policy to the conversational app (../lib/apiRetry), so a rate
-  // limit does not become a difference between the two conditions.
+  // Shared org Groq quota: retry TPM 429s (same policy as conversational-ui).
   const callGroqWithBackoff = async (
     userMessage: string,
     history: ChatMessage[],
@@ -248,9 +214,7 @@ export const useGenChat = () => {
       } catch (err: any) {
         const status: number | undefined = err?.status;
         const retryable = isRetryableError(err);
-        // Every failed attempt is logged through the EXISTING ai_response event
-        // (status code + ISO timestamp), so a session log shows exactly where
-        // the rate limit interrupted the participant.
+        // Log each failed attempt on the existing ai_response event.
         logAiResponse({
           api_error: true,
           status: status ?? null,
@@ -266,8 +230,7 @@ export const useGenChat = () => {
     }
   };
 
-  /** City set, dates empty → ask (same policy as conversational-ui). Does not
-   *  search; keeps the unresolved intent on the assistant turn for logging. */
+  /** City set, dates empty → ask (no search); keeps intent on the assistant turn. */
   const askForDates = (intent: GenIntent) => {
     const text = datesQuestionFor(intent);
     logAiResponse({ ...intent, layout_rendered: 'none', awaiting_dates: true });
@@ -283,18 +246,8 @@ export const useGenChat = () => {
     ]);
   };
 
-  // Filter + generative-layout pipeline for an already-resolved intent, then
-  // land the assistant screen. Shared by fresh LLM queries (sendMessage) and
-  // deterministic refinements (refineView) so both compose the SAME way.
-  //
-  // `query` is the wording that produced this screen — the typed message, or a
-  // chip's label. It rides on the screen so a superseded one can label itself
-  // in the history stack.
+  // Resolve layout + filter, then land the screen (shared by sendMessage and refineView).
   const applyIntent = async (intent: IntentJSON & { layout?: string }, query: string) => {
-    // Everything the caller answers without looking anything up (off-topic,
-    // too-broad, unknown city, missing dates) has already returned by now.
-    // From here it is actually searching the dataset, so show that step before
-    // the screen lands.
     setLoadingPhase('searching');
     await sleep(SEARCH_STEP_MS);
 
@@ -304,8 +257,7 @@ export const useGenChat = () => {
       intent.dest_city = getCityName(resolvedDest[0]);
     }
 
-    // ── Generative step: validate the model's layout choice, then let the
-    // data override it where the model can't know better ──
+    // Validate layout; data may override (empty → alert, no itinerary pair → grid).
     let layout: Layout = (MODEL_LAYOUTS as readonly string[]).includes(intent.layout ?? '')
       ? (intent.layout as Layout)
       : 'grid';
@@ -313,7 +265,7 @@ export const useGenChat = () => {
     let itinerary: ItineraryPair | null = null;
     if (layout === 'itinerary') {
       itinerary = buildItinerary(flights, intent, medianCo2);
-      if (!itinerary) layout = 'grid'; // no viable pair — degrade gracefully
+      if (!itinerary) layout = 'grid'; // no viable pair
     }
 
     let alternatives: AlertAlternatives | undefined;
@@ -343,13 +295,7 @@ export const useGenChat = () => {
     );
   };
 
-  // Deterministic refinement of the CURRENT view (the "Refine this view" chips
-  // and the destination/map/calendar drill-ins). The patch is merged ONTO the
-  // base intent, so every prior slot (destination, dates, price cap, stops,
-  // low_co2…) persists unless the patch explicitly overrides it — this is the
-  // whole point: chips compose, they don't replace. No LLM round-trip, so the
-  // composition is exact and reproducible. Still logs as an ordinary
-  // user_message + ai_response, exactly like a typed query.
+  // Chip/drill-in refine: merge patch onto base intent (compose, don't replace). No LLM.
   const refineView = async (
     base: ChatMessage,
     patch: Partial<IntentJSON & { layout?: string }>,
@@ -359,9 +305,7 @@ export const useGenChat = () => {
     const merged: IntentJSON & { layout?: string } = {
       ...baseIntent,
       ...patch,
-      // Keep the template the user is refining unless the patch changes it.
-      // base.layout is the rendered (post-fallback) layout the user can see;
-      // it is never 'alert' here because refine chips require a non-empty result.
+      // Keep rendered layout unless the patch changes it (chips require non-empty results).
       layout: patch.layout ?? base.layout ?? baseIntent.layout,
     };
 
@@ -370,8 +314,6 @@ export const useGenChat = () => {
       { id: `user-${Date.now()}`, role: 'user', text: label, timestamp: Date.now() },
     ]);
     logUserMessage(label);
-    // A chip refinement skips the LLM, so it starts at the search step — but it
-    // still shows the search running rather than swapping the screen instantly.
     setLoadingPhase('searching');
     setIsLoading(true);
     try {
@@ -397,23 +339,17 @@ export const useGenChat = () => {
     setLoadingPhase('thinking');
     setIsLoading(true);
 
-    // The intent behind the screen currently on the canvas. A typed refinement
-    // composes onto it the same way a "Refine this view" chip composes onto
-    // base.intent in refineView — until now only the chips did, so typing the
-    // refinement instead of clicking it silently lost every established slot.
+    // Current canvas intent — typed refinements compose onto it like chips.
     const previousIntent =
       ([...messages].reverse().find((m) => m.role === 'assistant' && m.intent)?.intent ??
         null) as GenIntent | null;
 
-    // Local-first: study tasks and clear city/date / explore turns never call
-    // Groq. Also the main same-thread city fix — typed destination wins without
-    // the model echoing Barcelona from earlier userHistory.
+    // Local-first: study / clear city-date / explore skips Groq (typed city wins).
     const localIntent = tryLocalIntent(text, previousIntent != null);
     if (localIntent) {
       try {
         const resolved = resolveTurnIntent(previousIntent, localIntent, text);
-        // Align with conversational-ui: never silently search-all when a city
-        // is set but the turn (or a mid-task drop) left dates empty.
+        // Undated city → ask (parity with conversational-ui).
         if (needsDatesClarification(resolved)) {
           logAiResponse({
             ...resolved,
@@ -443,14 +379,12 @@ export const useGenChat = () => {
       return;
     }
 
-    // When the user names a NEW city (or starts an open explore), prior user
-    // turns in the Groq payload only teach the model to keep the old city.
+    // New city / open explore: omit Groq history so the model doesn't keep the old city.
     const historyForGroq = shouldOmitGroqHistory(text, previousIntent) ? [] : messages;
 
     try {
       let rawContent = await callGroqWithBackoff(text, historyForGroq);
-      // Dev-only: dumps the full raw model JSON per query. Gated so it never
-      // fires during a participant session (production build sets DEV = false).
+      // Dev-only raw dump (stripped in production).
       if (import.meta.env.DEV) console.log('[Groq Raw Response]', rawContent);
 
       let intent: GenIntent | null = null;
@@ -459,9 +393,7 @@ export const useGenChat = () => {
         intent = JSON.parse(cleanJsonString);
       } catch (parseErr) {
         console.warn('Groq response was not valid JSON. Retrying...', parseErr);
-        // The API call is deliberately OUTSIDE the inner try: a rate limit on
-        // the retry must surface as the rate-limit notice, not be swallowed and
-        // reported to the participant as "I couldn't understand that query".
+        // Retry outside inner try so 429 surfaces as rate-limit, not parse failure.
         rawContent = await callGroqWithBackoff(text, historyForGroq, true);
         try {
           const cleanJsonStringRetry = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -485,12 +417,10 @@ export const useGenChat = () => {
         return;
       }
 
-      // Typed city / price / time / dates win; new city clears leaked filters.
-      // Replaces the thin return-leg-only / blank-date-only backstops that let
-      // Task 2 keep showing Barcelona after Task 1 in the same chat.
+      // Typed slots win; new city clears leaked filters.
       intent = resolveTurnIntent(previousIntent, intent, text);
 
-      // Off-topic messages: answer politely instead of dumping the whole dataset
+      // Off-topic: polite refusal, not a full-dataset dump
       if (intent.off_topic) {
         logAiResponse({ ...intent, layout_rendered: 'none' });
         setMessages((prev) => [
@@ -506,9 +436,7 @@ export const useGenChat = () => {
         return;
       }
 
-      // No usable constraints: ask the user to narrow down — UNLESS the model
-      // chose an exploratory layout (map / destinations), where "everything
-      // reachable from London" is exactly what the user asked to see.
+      // Too broad unless exploratory (map / destinations).
       const exploratory = intent.layout === 'map' || intent.layout === 'destinations';
       if (!hasSearchConstraints(intent) && !exploratory) {
         logAiResponse({ ...intent, layout_rendered: 'none' });
@@ -525,7 +453,7 @@ export const useGenChat = () => {
         return;
       }
 
-      // Destination mentioned but not in our route network
+      // Unknown destination
       const wantsDestination = Boolean(intent.dest_city?.trim() || intent.dest_code?.trim());
       const resolvedDest = resolveDestCodes(intent);
       if (wantsDestination && resolvedDest.length === 0) {
@@ -544,8 +472,7 @@ export const useGenChat = () => {
         return;
       }
 
-      // City set, no dates → ask (do not search the whole remaining window).
-      // Same undated policy as conversational-ui; open explore has no city.
+      // City set, no dates → ask (same undated policy as conversational-ui).
       if (needsDatesClarification(intent)) {
         askForDates(intent);
         setIsLoading(false);
@@ -557,12 +484,7 @@ export const useGenChat = () => {
       console.error('[Groq API Error]', err?.status, err);
       const message = friendlyApiError(err);
 
-      // This canvas renders exactly ONE screen: the newest assistant/system
-      // message. Appending a system message therefore DESTROYS the layout the
-      // participant was working with — the whole generated screen is replaced
-      // by an error card. So the failure is surfaced as a banner over the
-      // existing screen instead, and only takes the canvas when there is no
-      // screen yet to preserve.
+      // Prefer error banner over replacing the live screen with a system card.
       const hasScreen = messages.some((m) => m.role === 'assistant');
       setError(message);
       if (!hasScreen) {

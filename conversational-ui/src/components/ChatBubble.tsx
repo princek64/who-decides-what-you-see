@@ -9,27 +9,21 @@ interface ChatBubbleProps {
   message: ChatMessage;
   /** Hide prior flight tables while a clarifying slot question is active. */
   suppressResults?: boolean;
-  /** Present only on a retryable system notice (rate limit / 5xx): re-sends the
-   *  message the failure swallowed. Assistant answers have no retry — see the
-   *  footer comment below. */
+  /** Retryable system notice only — re-sends the message the failure swallowed. */
   onRetry?: () => void;
-  /** Present only on the latest assistant results: re-search from a chosen
-   *  London airport ('' = all London airports). */
+  /** Latest assistant results only — re-search from a chosen London airport. */
   onPickOrigin?: (originCode: string) => void;
-  /** Present only on the latest "I only fly from London" reply. */
+  /** Latest "I only fly from London" reply only. */
   onSearchLondon?: () => void;
 }
 
-// Origin is never asked (the dataset is London-only). The assumption is stated
-// as a small grey "what I understood" line ABOVE the answer — a clarification,
-// not a control. The origin is the one tappable word in it, because changing
-// departure airport re-runs the search.
+// Origin assumed London; tappable so changing airport re-runs the search.
 const AssumptionLine: React.FC<{
   intent?: IntentJSON;
   onPickOrigin?: (originCode: string) => void;
-  /** When the answer shows a preview of a larger set. */
+  /** Preview of a larger set. */
   shownOfTotal?: { shown: number; total: number } | null;
-  /** Compare / keep-stops: both stop types are in the answer. */
+  /** Compare / keep-stops: both stop types in the answer. */
   showingStops?: boolean;
   /** Directs-only preview while connecting flights exist. */
   hidStops?: boolean;
@@ -117,9 +111,7 @@ const AssumptionLine: React.FC<{
   );
 };
 
-// Plain assistant replies (baggage answers, zero-result notes) may carry the
-// same **bold** the prose answers use, so they get the same emphasis instead of
-// literal asterisks.
+// Inline **bold** for plain assistant replies (baggage, zero-result notes).
 const renderInlineBold = (text: string) =>
   text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith('**') && part.endsWith('**') ? (
@@ -131,10 +123,7 @@ const renderInlineBold = (text: string) =>
     )
   );
 
-/**
- * Insight / plain-text blocks: blank lines separate sections; consecutive
- * "- " lines become a bullet list so compare / cheapest-when insights scan.
- */
+/** Blank-line sections; consecutive "- " lines become a bullet list. */
 const renderFormattedBlocks = (text: string, className = '') => {
   const sections = text.split(/\n\n+/).filter((s) => s.trim());
   return sections.map((section, i) => {
@@ -168,11 +157,6 @@ const renderFormattedBlocks = (text: string, className = '') => {
   });
 };
 
-// Refinement is offered in WORDS now: buildProseAnswer ends the answer with a
-// follow-up question ("Want me to narrow it to direct flights only, …?"), and
-// the participant answers it by typing. There are no suggestion chips — the
-// answer is conversation, not a control panel.
-
 export const ChatBubble: React.FC<ChatBubbleProps> = ({
   message,
   suppressResults = false,
@@ -203,7 +187,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
   const formatTime = (timestamp: number) =>
     new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  // System notices (rate limit / API failure) stay quiet inline text, not a card.
   if (isSystem) {
     return (
       <div className="w-full py-3 animate-fade-in-down">
@@ -211,8 +194,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           <AlertTriangle className="w-4 h-4 text-accent-amber shrink-0 mt-0.5" />
           <div>
             <p className="leading-relaxed">{message.text}</p>
-            {/* Re-sends the same message, so the participant never has to retype
-                a task query the rate limiter swallowed. */}
             {message.retryable && onRetry && (
               <button
                 type="button"
@@ -229,7 +210,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     );
   }
 
-  // User turn: a bubble on the right, like ChatGPT.
   if (isUser) {
     return (
       <div className="group flex justify-end w-full py-2 animate-fade-in">
@@ -245,13 +225,11 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
     );
   }
 
-  // Assistant turn: plain prose on the left. No avatar, no bubble, no card —
-  // the response is text in the thread (ChatGPT / Perplexity pattern).
+  // Assistant: plain prose on the left (no avatar/bubble/card).
   return (
     <div className="group w-full py-3 animate-fade-in">
       {hasResults ? (
         <>
-          {/* "What I understood" note, stated before the answer */}
           <AssumptionLine
             intent={message.intent}
             onPickOrigin={onPickOrigin}
@@ -278,18 +256,12 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
                 : null
             }
           />
-          {/* Comparison / cheapest-day insight, stated before the answer.
-              Verdict + why + option bullets (see insights.ts). */}
           {message.preface && (
             <div className="mb-3">{renderFormattedBlocks(message.preface)}</div>
           )}
           <FlightProse
             flights={message.flights!}
             intent={message.intent || {}}
-            keepStops={Boolean(
-              message.slot?.compare || message.slot?.cheapest_when || message.slot?.keep_stops
-            )}
-            compare={Boolean(message.slot?.compare)}
             showAll={Boolean(message.showAll)}
           />
         </>
@@ -299,7 +271,6 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         </div>
       )}
 
-      {/* "I only fly from London" offer — search from London instead */}
       {message.offerLondon && onSearchLondon && (
         <button
           type="button"
@@ -310,9 +281,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
         </button>
       )}
 
-      {/* Footer: timestamp + hover-reveal copy. There is no regenerate action —
-          re-running a turn would append a second answer to the same question,
-          which reads as a duplicate in the thread and in the session log. */}
+      {/* No regenerate — re-running would append a duplicate answer in thread + log. */}
       <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground select-none">
         <span className="font-mono tabular-nums">{formatTime(message.timestamp)}</span>
         <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">

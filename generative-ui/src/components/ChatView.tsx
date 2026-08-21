@@ -12,8 +12,7 @@ import { AlertTriangle, PlaneTakeoff, Search, Trash2, X } from 'lucide-react';
 import { FlightSketchLogo } from './FlightSketchLogo';
 import { SearchSteps } from './SearchSteps';
 
-// Stable module-level reference — an inline array literal as the hook's
-// `examples` prop would recreate on every render and restart the animation.
+// Module-level: inline array as hook prop would restart the typewriter each render.
 const SEARCH_EXAMPLES = [
   'Cheapest direct one-way to Barcelona on 16 October 2026',
   'Compare direct vs one-stop to Lisbon on 15 November 2026',
@@ -40,8 +39,7 @@ export const ChatView: React.FC = () => {
   const [inputText, setInputText] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
-  // Animated placeholder runs only while the search bar is empty, unfocused,
-  // and not mid-search — a focused-or-typed-in input is "normal," not a demo.
+  // Typewriter only when empty, unfocused, and idle.
   const typewriterActive = inputText === '' && !isSearchFocused && !isLoading;
   const { text: typedExample, showCaret } = useTypewriterPlaceholder({
     examples: SEARCH_EXAMPLES,
@@ -54,19 +52,12 @@ export const ChatView: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // The canvas shows the latest assistant/system response in full, with the
-  // user query that produced it. Screens it superseded are not thrown away:
-  // the most recent MAX_HISTORY_SCREENS of them sit above it as collapsed
-  // one-line rows the participant can re-open. Anything older stays in
-  // `messages` (and in the session log) but leaves the canvas.
   let screenMessage = null;
   let screenQuery = '';
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].role !== 'user') {
       screenMessage = messages[i];
-      // Screens carry their own query; the backward scan is the fallback for
-      // anything recorded before that (and for system messages, which have no
-      // query of their own).
+      // Prefer message.query; scan back for older / system messages.
       screenQuery = messages[i].query ?? '';
       if (!screenQuery) {
         for (let j = i - 1; j >= 0; j--) {
@@ -81,28 +72,21 @@ export const ChatView: React.FC = () => {
   }
   const lastUserText = [...messages].reverse().find((m) => m.role === 'user')?.text;
 
-  // Refinements replace the screen they refine (see applyIntent), so every
-  // assistant message still in the list is a screen the user actually
-  // navigated away from — no filtering for near-duplicates is needed here.
   const historyScreens =
     screenMessage?.role === 'assistant' ? visibleHistory(messages, screenMessage.id) : [];
 
-  // Which collapsed screen, if any, is currently opened back up. Only one at a
-  // time: two full screens plus the current one is the clutter this replaced.
+  // At most one expanded history screen at a time.
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
-  // Each rebuilt screen starts at the top of the canvas
   useEffect(() => {
     canvasRef.current?.scrollTo({ top: 0 });
   }, [screenMessage?.id]);
 
-  // Focus the search bar once the app is ready (and keep focus after sending)
   useEffect(() => {
     if (!csvLoading) inputRef.current?.focus();
   }, [csvLoading]);
 
-  // Starting over clears the history stack too — leaving a previous search's
-  // row on a blank canvas would outlive the search it belongs to.
+  // Clear history expansion with the conversation.
   const startNewSearch = () => {
     setExpandedHistoryId(null);
     clearConversation();
@@ -142,7 +126,7 @@ export const ChatView: React.FC = () => {
         </Button>
       )}
 
-      {/* Search pill: single-line query input, not a chat composer */}
+      {/* Search pill */}
       <div className="flex-1 flex items-center gap-2 bg-white/[0.02] border border-input rounded-full pl-4 pr-1.5 h-12 hover:border-white/40 focus-within:border-white/45 focus-within:ring-2 focus-within:ring-ring/40 transition-colors min-w-0">
         <Search className="w-4 h-4 text-muted-foreground shrink-0" />
         <div className="relative flex-1 min-w-0">
@@ -165,9 +149,7 @@ export const ChatView: React.FC = () => {
             aria-label="Describe the flights you're looking for"
             className="w-full bg-transparent outline-none text-sm text-foreground placeholder:text-muted-foreground"
           />
-          {/* Animated demo placeholder — purely decorative (aria-hidden), so
-              it never reaches screen readers or steals focus/typing from the
-              real input underneath. */}
+          {/* Decorative typewriter (aria-hidden) */}
           {typewriterActive && (
             <div
               aria-hidden="true"
@@ -217,7 +199,7 @@ export const ChatView: React.FC = () => {
         </button>
       </header>
 
-      {/* CSV Database Loading Screen */}
+      {/* Dataset loading */}
       {csvLoading ? (
         <div className="flex-1 flex flex-col items-center justify-center bg-background p-6">
           <div className="w-24 h-24 rounded-full border border-dashed border-border flex items-center justify-center overflow-hidden bg-muted relative">
@@ -227,7 +209,7 @@ export const ChatView: React.FC = () => {
         </div>
       ) : messages.length === 0 ? (
 
-        /* ── Empty state: a search page, not a chat greeting ── */
+        /* Empty state */
         <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full animate-fade-in">
           <div className="text-center space-y-2 mb-8 w-full">
             <h2 className="text-3xl md:text-4xl font-heading font-semibold text-foreground tracking-tight">Where do you want to go?</h2>
@@ -242,14 +224,11 @@ export const ChatView: React.FC = () => {
         </div>
       ) : (
 
-        /* ── Active state: one full-canvas generated screen at a time ── */
+        /* Active: one generated screen */
         <div className="flex-1 flex flex-col min-h-0">
           <div ref={canvasRef} className="relative flex-1 min-h-0 overflow-y-auto">
 
-            {/* Rate limit / service error: a banner ABOVE the generated screen,
-                which stays exactly as it was. Replacing the canvas with an
-                error card would throw away the layout the participant is
-                mid-task on. */}
+            {/* Error banner above the live screen (don't replace it) */}
             {error && !isLoading && screenMessage?.role !== 'system' && (
               <div className="sticky top-6 z-20 flex justify-center px-4 animate-fade-in">
                 <div className="bg-card border border-border rounded-lg px-4 py-3 flex gap-3 items-start max-w-xl w-full">
@@ -281,7 +260,7 @@ export const ChatView: React.FC = () => {
               </div>
             )}
 
-            {/* While regenerating, the old screen dims underneath a status pill */}
+            {/* Loading status over dimmed screen */}
             {isLoading && screenMessage && (
               <div className="sticky top-6 z-10 flex justify-center px-4 pointer-events-none">
                 <div className="bg-card border border-border rounded-full px-5 py-2.5 flex items-center gap-2.5 max-w-full min-w-0">
@@ -291,10 +270,7 @@ export const ChatView: React.FC = () => {
               </div>
             )}
 
-            {/* Superseded screens, newest nearest the current one. Collapsed to
-                a row each; expanding one renders it in full above the current
-                answer, without its refine/regenerate controls — it is there to
-                be read back, not to be worked on in place of the live screen. */}
+            {/* Collapsed prior screens (read-only when expanded) */}
             {historyScreens.length > 0 && (
               <div className="mx-auto w-full max-w-6xl px-4 md:px-8 pt-6 space-y-2">
                 <div className="text-[11px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
@@ -348,7 +324,7 @@ export const ChatView: React.FC = () => {
                 />
               </div>
             ) : (
-              /* First query in flight: nothing to replace yet */
+              /* First query in flight */
               isLoading && (
                 <div className="h-full flex flex-col items-center justify-center p-6 animate-fade-in">
                   <div className="w-24 h-24 rounded-full border border-dashed border-border flex items-center justify-center overflow-hidden bg-muted relative">
@@ -378,7 +354,7 @@ export const ChatView: React.FC = () => {
         </div>
       )}
 
-      {/* Flight Detail Dialog Modal */}
+      {/* Flight detail modal */}
       <FlightDetailModal
         flight={selectedFlight}
         isOpen={isModalOpen}

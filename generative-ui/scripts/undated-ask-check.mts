@@ -1,10 +1,6 @@
 /**
- * Offline check: city + no dates → ask, never silent search-all.
- *
- * Aligns generative-ui with conversational-ui's firstMissingRequiredSlot('dates')
- * so a mid-task refinement that drops the date cannot diverge between UIs.
- *
- * Run from generative-ui/:  npx tsx scripts/undated-ask-check.mts
+ * Offline: city + no dates → ask (parity with conversational firstMissingRequiredSlot).
+ * Run: npx tsx scripts/undated-ask-check.mts
  */
 import {
   datesQuestionFor,

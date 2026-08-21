@@ -1,15 +1,5 @@
 /**
- * Offline check of round-trip intent and the "add the return leg" follow-up
- * (no Groq calls).
- *
- * Reported failure: "find the cheapest return trip to Paris for a weekend in the
- * next three months" came back with outbound flights only, and asking for the
- * return afterwards repeated the outbound list.
- *
- * Part 1 is a wording gap — isRoundTripQuery matched "return FLIGHT" but not
- * "return TRIP" — and everything downstream follows from the flag it sets, so
- * these assertions run the flag all the way through slotToIntent and the filter
- * to prove both legs actually come back.
+ * Offline round-trip intent + "add the return leg" (both legs via filter).
  */
 import fs from 'node:fs';
 import path from 'node:path';

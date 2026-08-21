@@ -1,18 +1,6 @@
 /**
- * Rate-limit / transient-failure handling for the Groq calls.
- *
- * Both research apps run against the SAME org-level Groq quota, and the free
- * tier is tight on tokens/min and tokens/day against a ~3.6k-token prompt — so
- * during a participant session a 429 is an ordinary event, not an exception.
- * Left unhandled it surfaced as a raw "Could not reach the AI service. Please
- * check your internet connection" alert, which is both wrong (the connection
- * is fine) and unrecoverable-looking mid-task.
- *
- * Two different 429s must not be treated the same:
- * - Tokens-per-minute (TPM) / requests: wait a few seconds and retry.
- * - Tokens-per-day (TPD): the day's allowance is gone. Retrying burns time and
- *   never succeeds until the window refills (~tens of minutes). Fail fast with
- *   a clear message instead.
+ * Groq rate-limit / transient-failure helpers (shared policy with conversational-ui).
+ * TPM/request 429s: wait and retry. TPD 429s: fail fast — retries never succeed.
  */
 
 /** How many times a retryable call is re-attempted after the first failure. */
@@ -24,10 +12,7 @@ export const sleep = (ms: number): Promise<void> =>
 const errorMessage = (err: any): string =>
   String(err?.message ?? err?.error?.message ?? err ?? '');
 
-/**
- * Groq's daily token ceiling (TPD). Surfaced only in the 429 body, e.g.
- * "Limit 200000, Used 199429, Requested 3981" / "tokens per day".
- */
+/** Daily token ceiling (TPD) — only visible in the 429 body text. */
 export const isDailyTokenQuotaError = (err: any): boolean => {
   if (err?.status !== 429) return false;
   const msg = errorMessage(err);
@@ -39,24 +24,17 @@ export const isDailyTokenQuotaError = (err: any): boolean => {
   );
 };
 
-/** 429 (rate limit), 408 (timeout) and 5xx are worth another attempt; 4xx is not. */
+/** 429 / 408 / 5xx are retryable; other 4xx are not. */
 export const isRetryableStatus = (status?: number): boolean =>
   status === 429 || status === 408 || (typeof status === 'number' && status >= 500);
 
-/**
- * Prefer this over isRetryableStatus when the full error is available: a TPD
- * 429 has status 429 but must not be retried.
- */
+/** Prefer over isRetryableStatus: TPD 429s must not be retried. */
 export const isRetryableError = (err: any): boolean => {
   if (isDailyTokenQuotaError(err)) return false;
   return isRetryableStatus(err?.status);
 };
 
-/**
- * Seconds the API asked us to wait, from either the Retry-After header or the
- * "Please try again in 6.7s" / "24m12.54s" text Groq puts in the error message.
- * Returns null when the API said nothing.
- */
+/** Seconds from Retry-After header or Groq "try again in …" message text. */
 export const retryAfterSeconds = (err: any): number | null => {
   const header =
     err?.headers?.['retry-after'] ??
@@ -67,7 +45,6 @@ export const retryAfterSeconds = (err: any): number | null => {
 
   const msg = errorMessage(err);
 
-  // "Please try again in 24m12.54s" / "1h5m" / "900ms" / "6.7s"
   // Minutes must not swallow the "m" in "ms" (negative lookahead).
   const compound = msg.match(
     /try again in\s+(?:(\d+)\s*h)?(?:(\d+)\s*m(?!s))?(?:([\d.]+)\s*s)?(?:([\d.]+)\s*ms)?/i
@@ -83,11 +60,7 @@ export const retryAfterSeconds = (err: any): number | null => {
   return null;
 };
 
-/**
- * Wait before attempt N: honour the API's own retry-after when it gave one
- * (capped so a participant is never left staring at a spinner), otherwise
- * exponential backoff from 1s.
- */
+/** Honour API retry-after (capped) or exponential backoff from 1s. */
 export const retryDelayMs = (err: any, attempt: number): number => {
   const MAX_WAIT_MS = 12_000;
   const advised = retryAfterSeconds(err);
@@ -109,11 +82,7 @@ const formatWaitHint = (err: any): string => {
   return `about ${Math.ceil(secs)} seconds`;
 };
 
-/**
- * What the participant reads. Distinguishes daily quota from per-minute rate
- * limits, service outages, and network drops — the previous single message
- * blamed the user's connection for all of them, and treated TPD like TPM.
- */
+/** Participant-facing copy: distinguish TPD, TPM, 5xx, 401, and network. */
 export const friendlyApiError = (err: any): string => {
   const status: number | undefined = err?.status;
   if (status === 429) {

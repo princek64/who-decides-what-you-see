@@ -1,15 +1,6 @@
 /**
- * Local-first slot resolution for study sessions.
- *
- * Groq free-tier TPD is shared across both research apps. A cold call costs
- * ~3.5k tokens against a 200k/day ceiling, and admission uses the pre-cache
- * estimate — so near the limit even a tiny user message is refused.
- *
- * Strategy:
- * 1. Exact / close variants of the five study tasks → golden slots (no Groq).
- * 2. Any other message we can fully (or usefully) parse with wording detectors
- *    → local slot (no Groq). resolveTurnSlot still merges prior context.
- * 3. Only genuinely ambiguous / off-topic-looking turns hit Groq.
+ * Local-first slot resolution for study sessions (shared Groq TPD is tight).
+ * Study-task matches and clear wording → skip Groq; ambiguous turns still call it.
  */
 
 import {
@@ -88,15 +79,13 @@ const matchBarcelonaDirect = (text: string): SlotJSON | null => {
 
 /**
  * Task 2 — one-way Amsterdam with evening departure and/or a price cap.
- * Date optional in wording ("on november 21st?") — when absent, dates stay
- * missing so the app asks rather than inventing a day.
+ * Date optional — when absent, dates stay missing so the app asks.
  */
 const matchAmsterdamConstrained = (text: string): SlotJSON | null => {
   if (!/\bamsterdam\b/i.test(text)) return null;
   const price = maxPriceFromText(text);
   const after = departureAfterFromText(text);
-  // Need at least one of the Task 2 constraints so a bare "flights to Amsterdam"
-  // still goes through the model.
+  // Need a Task 2 constraint so bare "flights to Amsterdam" still hits the model.
   if (price == null && after == null) return null;
   if (!/\b(?:one[\s-]?way|flight|flights|fly|flying)\b/i.test(text)) return null;
   const day = dateFromText(text);
@@ -159,8 +148,7 @@ const matchParisWeekendReturn = (text: string): SlotJSON | null => {
 };
 
 /**
- * Task 5 — open £150 weekend explore ("where could you go" / budget options).
- * Must not name a destination city.
+ * Task 5 — open £150 weekend explore. Must not name a destination city.
  */
 const matchBudgetWeekendExplore = (text: string): SlotJSON | null => {
   if (/\b(?:barcelona|amsterdam|rome|paris|lisbon|madrid|milan|athens|vienna|prague)\b/i.test(text)) {
@@ -190,10 +178,7 @@ const matchBudgetWeekendExplore = (text: string): SlotJSON | null => {
   );
 };
 
-/**
- * If this message is one of the five study tasks (or a close variant), return
- * a complete slot and skip Groq. Otherwise null.
- */
+/** Study-task (or close variant) → complete slot and skip Groq; else null. */
 export const matchStudyTaskSlot = (text: string): SlotJSON | null => {
   const t = text.trim();
   if (!t) return null;
@@ -207,12 +192,8 @@ export const matchStudyTaskSlot = (text: string): SlotJSON | null => {
 };
 
 /**
- * Build a slot from wording alone when we have enough signal. Used before any
- * Groq call so follow-ups like "weekend of 28 August" or "under £150" against
- * an on-screen search never burn daily quota.
- *
- * @param hasPreviousSlot true when an assistant slot is already on screen —
- *   enables date/price/time-only refinements without naming a city again.
+ * Slot from wording alone when signal is enough (before any Groq call).
+ * @param hasPreviousSlot enables date/price/time-only refinements without a city.
  */
 export const tryLocalSlot = (
   text: string,

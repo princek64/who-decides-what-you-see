@@ -1,12 +1,6 @@
 /**
- * Verifies the generative-ui QA fixes against the CSV using the app's REAL
- * filter code:
- *   - weekend is now an actual OUTBOUND filter (task 5), while return legs are
- *     left alone so the itinerary builder's Fri/Sat -> Sun/Mon pairing survives
- *   - task 3 (Rome comparison) candidate set is intact
- *   - task 4 cheapest weekend DAY unchanged
- *
- * Run from generative-ui/:  npx tsx scripts/fix-verify.mts
+ * QA verify vs CSV: weekend outbound filter, Rome comparison, cheapest weekend day.
+ * Run: npx tsx scripts/fix-verify.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

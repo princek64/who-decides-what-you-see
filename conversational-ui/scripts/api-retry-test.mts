@@ -1,11 +1,6 @@
 /**
- * Unit test for the 429 / transient-failure policy shared by BOTH apps
- * (src/lib/apiRetry.ts, copied verbatim into generative-ui). No network: the
- * Groq client is replaced by a stub that fails on demand, so the retry count,
- * the honoured retry-after, the session-log entries and the participant-facing
- * message are all asserted directly.
- *
- * Run from conversational-ui/:  npx tsx scripts/api-retry-test.mts
+ * Offline unit test for shared 429 / transient-failure retry policy (apiRetry.ts).
+ * Run: npx tsx scripts/api-retry-test.mts
  */
 import {
   MAX_API_RETRIES,

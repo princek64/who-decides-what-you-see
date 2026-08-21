@@ -1,8 +1,6 @@
 /**
- * Offline checks for session fixes (DE months, reset, region, next-month window,
- * Fri–Sun calendar parity helpers).
- *
- * Run from conversational-ui/:  npx tsx scripts/session-fix-check.mts
+ * Offline session fixes: DE months, reset, region, next-month, Fri–Sun helpers.
+ * Run: npx tsx scripts/session-fix-check.mts
  */
 import {
   RESET_CUE,

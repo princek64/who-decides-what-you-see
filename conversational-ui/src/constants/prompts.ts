@@ -1,20 +1,14 @@
-// Kept in sync with the canonical CSV's actual date span (see
-// data/verify_dataset.py) — the dataset gets periodically shifted forward so
-// searches never land on past dates; update these two whenever that happens.
+// Dataset date span (see data/verify_dataset.py); update when the CSV is shifted forward.
 export const DATA_MIN = '2026-08-05';
 export const DATA_MAX = '2027-02-04';
 
-// The real "today", clamped into the dataset window so relative dates ("this
-// weekend", example-chip dates) always resolve to searchable flights. Shared by
-// the intent prompt and the empty-state suggestion chips so they never disagree.
+// "Today" clamped into the dataset window; shared by the intent prompt and suggestion chips.
 export const getSearchAnchor = (): string => {
   const todayStr = new Date().toISOString().slice(0, 10);
   return todayStr < DATA_MIN ? DATA_MIN : todayStr > DATA_MAX ? DATA_MAX : todayStr;
 };
 
-// A future example date (anchor + daysAhead), clamped to the dataset window,
-// formatted as "24 July" for the empty-state suggestion chips. Kept entirely in
-// local time — a toISOString() round-trip would shift the day in non-UTC zones.
+// Example chip date (anchor + daysAhead), clamped; local time only (avoid toISOString day shift).
 export const exampleChipDate = (daysAhead: number): string => {
   const d = new Date(`${getSearchAnchor()}T00:00:00`);
   d.setDate(d.getDate() + daysAhead);
@@ -23,16 +17,14 @@ export const exampleChipDate = (daysAhead: number): string => {
   return chip.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
 };
 
-// The LLM has no idea what "today", "this weekend" or "next month" mean unless
-// we tell it. Built at call time so every session gets the real current date.
+// Inject today's date into the prompt at call time.
 export const buildSystemPrompt = (): string => {
   const now = new Date();
   const weekday = now.toLocaleDateString('en-GB', { weekday: 'long' });
-  // If the app is used outside the dataset window, anchor "today" to the window
-  // so relative dates still resolve to searchable flights.
+  // Outside the dataset window, clamp "today" so relative dates stay searchable.
   const anchor = getSearchAnchor();
 
-  // Pre-computed "+3 months" bound for the flexible-date guidance below
+  // "+3 months" bound for flexible-date guidance below
   const anchorDate = new Date(`${anchor}T00:00:00`);
   anchorDate.setMonth(anchorDate.getMonth() + 3);
   let anchorPlus3 = anchorDate.toISOString().slice(0, 10);

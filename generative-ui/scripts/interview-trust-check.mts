@@ -1,7 +1,6 @@
 /**
  * Interview trust fixes for generative-ui.
- *
- * Run from generative-ui/:  npx tsx scripts/interview-trust-check.mts
+ * Run: npx tsx scripts/interview-trust-check.mts
  */
 import {
   applyIntentBackstops,

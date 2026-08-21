@@ -3,19 +3,8 @@ import { getCityName } from './airportMap';
 import { formatFlightDate } from './utils';
 
 /**
- * Answers about flights ALREADY on screen, straight from the dataset.
- *
- * "What's the baggage allowance for the cheapest flight?" used to fall through
- * to the model, be classified off_topic, and get the "I'm a flight search
- * assistant" deflection — for a question whose answer is a column in the CSV.
- * Every field the dataset holds is answerable here; the out-of-scope reply is
- * reserved for things it genuinely does not cover (hotels, visas, passports,
- * ground transport).
- *
- * Deterministic and LLM-free, so it costs no Groq quota and always answers the
- * same way for the same conversation state. The model's `detail_field` /
- * `detail_target` slots feed the same functions when the wording is less
- * obvious — see useChat.
+ * Detail answers for flights already on screen (CSV columns) — no Groq.
+ * Out-of-scope topics stay on the model's off_topic path.
  */
 
 /** Every attribute the chat can answer about a flight already shown. */
@@ -34,8 +23,7 @@ export type DetailField =
   | 'airline'
   | 'airport';
 
-// Wording -> field. Ordered: the first match wins, so the more specific
-// patterns (baggage, refunds) come before the looser ones (times, price).
+// First match wins — specific patterns (baggage, refunds) before looser ones.
 const FIELD_PATTERNS: [DetailField, RegExp][] = [
   [
     'baggage',
@@ -67,10 +55,8 @@ export const detectDetailField = (text: string): DetailField | null => {
   return null;
 };
 
-/** Kept for the baggage-specific call sites and tests. */
+/** Kept for baggage-specific call sites and tests. */
 export const isBaggageQuestion = (text: string): boolean => detectDetailField(text) === 'baggage';
-
-// ─── Field renderers ──────────────────────────────────────────────────────
 
 const money = (n: number) => `£${n.toFixed(2)}`;
 
@@ -96,7 +82,7 @@ const describeStops = (f: Flight): string => {
   return `has ${f.stops} stop${f.stops === 1 ? '' : 's'}${via ? ` (${via})` : ''}`;
 };
 
-// One clause per field, phrased to follow "**easyJet U21022** ".
+// Clause after "**easyJet U21022** ".
 const RENDERERS: Record<DetailField, (f: Flight) => string> = {
   baggage: (f) => `includes ${describeBaggage(f.baggage_policy)}`,
   aircraft: (f) => `is operated by ${f.aircraft_type || 'an unlisted aircraft'}`,
@@ -120,9 +106,7 @@ const RENDERERS: Record<DetailField, (f: Flight) => string> = {
     `leaves from ${airportLabel(f.origin_code)} (${f.origin_code})${f.origin_terminal ? `, Terminal ${f.origin_terminal}` : ''} and lands at ${airportLabel(f.dest_code)} (${f.dest_code})`,
 };
 
-// The clauses above are written for one flight ("includes…", "is…", "has…").
-// When several flights share an answer the subject becomes plural, so the
-// leading verb has to follow — otherwise: "All 3 of those flights includes…".
+// Plural subject needs plural leading verb ("All 3 … include", not "includes").
 const PLURAL_VERBS: Record<string, string> = {
   includes: 'include',
   is: 'are',
@@ -140,8 +124,6 @@ const pluralise = (clause: string): string => {
   return [PLURAL_VERBS[first] ?? first, ...rest].join(' ');
 };
 
-// ─── Which flight the question is about ───────────────────────────────────
-
 const normalise = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
 const pickBy = (pool: Flight[], better: (a: Flight, b: Flight) => boolean): Flight => {
@@ -151,9 +133,8 @@ const pickBy = (pool: Flight[], better: (a: Flight, b: Flight) => boolean): Flig
 };
 
 /**
- * Resolve which flights the question is about, from the wording and from the
- * model's `detail_target` when it supplied one. Superlatives are resolved BY
- * VALUE (never by list position), same rule as the summary sentences.
+ * Which flights the question is about (wording + optional detail_target).
+ * Superlatives resolve by value, never list position.
  */
 export const resolveTargets = (text: string, pool: Flight[], hint?: string | null): Flight[] => {
   const haystack = normalise(`${text} ${hint ?? ''}`);
@@ -180,11 +161,8 @@ export const resolveTargets = (text: string, pool: Flight[], hint?: string | nul
 };
 
 /**
- * Build the reply for a detail question about the flights on screen, or null
- * when there is nothing to answer from.
- *
- * `pool` is the result set of the most recent answer that had one; `field` and
- * `targetHint` are the model's slots when it classified the message.
+ * Detail reply for on-screen flights, or null when nothing to answer.
+ * `field` / `targetHint` come from the model when it classified the message.
  */
 export const buildDetailAnswer = (
   text: string,
@@ -209,8 +187,7 @@ export const buildDetailAnswer = (
     return lines.join(' ') + extra;
   }
 
-  // No specific flight named. When every flight on screen shares the answer,
-  // say it once; otherwise list them so the difference is visible.
+  // Shared answer once; otherwise list differences.
   const rendered = pool.map((f) => render(f));
   const unique = [...new Set(rendered)];
   if (unique.length === 1) {
@@ -228,11 +205,11 @@ export const buildDetailAnswer = (
   return lines.join(' ') + extra;
 };
 
-/** Baggage-only entry point, kept for the existing call sites and tests. */
+/** Baggage-only entry point for existing call sites and tests. */
 export const buildBaggageAnswer = (text: string, pool: Flight[]): string | null =>
   buildDetailAnswer(text, pool, 'baggage');
 
-/** Asked about a flight detail with nothing on screen to attach it to. */
+/** Detail asked with nothing on screen to attach it to. */
 export const DETAIL_NO_CONTEXT =
   "I can answer that for any flight I've found — search for a route first (say, \"flights to Barcelona on 3 August\") and then ask me about one of them.";
 

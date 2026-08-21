@@ -40,9 +40,7 @@ export interface IntentJSON {
   date?: string;
   date_from?: string;
   date_to?: string;
-  /** 'both' shows outbound AND return legs together (round trip) — used when
-   *  a destination is picked from a budget/anywhere search, since the user is
-   *  choosing somewhere to actually go, not just checking one-way fares. */
+  /** 'both' = outbound + return in one result list (round trip). */
   direction?: 'outbound' | 'return' | 'both';
   max_price?: number;
   stops?: number;
@@ -53,26 +51,18 @@ export interface IntentJSON {
   low_co2?: boolean;
   airline?: string;
   sort_by?: 'cheapest' | 'fastest' | 'earliest' | 'latest';
-  /** "weekend trip" — constrains itinerary outbound to Fri/Sat, return to Sun/Mon
-   *  (see layoutData.buildItinerary), AND restricts outbound departures to the
-   *  weekend-break window on every other layout. Before this it was honoured by
-   *  the itinerary builder alone, so "£150 and a free weekend" returned an
-   *  unconstrained Jul–Dec result set. */
+  /** Weekend trip: itinerary Fri/Sat→Sun/Mon; other layouts filter outbound Fri–Sun. */
   weekend?: boolean;
-  /** Coarse region allowlist for open explore (Eastern Europe). */
+  /** Coarse region allowlist for open explore. */
   dest_region?: 'eastern_europe';
 }
 
-// Weekend-break departure days: Friday (5), Saturday (6), Sunday (0). Flying
-// out Friday evening is the common weekend-away pattern, so Friday counts as a
-// weekend departure even though it is not a "weekend day". Applied to OUTBOUND
-// legs only — itinerary return legs are Sun/Mon and are paired separately.
+// Weekend-break departures: Fri/Sat/Sun (outbound only; itinerary pairs return separately).
 export const isWeekendDeparture = (date: string): boolean => {
   const day = new Date(`${date}T00:00:00`).getDay();
   return day === 5 || day === 6 || day === 0;
 };
 
-// Helper to convert HH:MM string to minutes from midnight
 const parseTimeToMins = (timeStr?: string): number | null => {
   if (!timeStr) return null;
   const parts = timeStr.split(':');
@@ -85,14 +75,12 @@ const parseTimeToMins = (timeStr?: string): number | null => {
 
 const LONDON_CODES = new Set(['LHR', 'LGW', 'STN', 'LTN', 'LCY', 'SEN']);
 
-// Resolve the intent's destination (code or city name) to airport codes.
-// Exported so the chat layer can tell "unknown city" apart from "no matches".
+// Dest code/city → airport codes (exported so chat can detect unknown cities).
 export const resolveDestCodes = (intent: IntentJSON): string[] => {
   let destCodes: string[] = [];
   if (intent.dest_code && intent.dest_code.trim()) {
     const dest = intent.dest_code.trim().toUpperCase();
-    // If it's a valid airport code in our map, filter by it.
-    // Otherwise, treat it as a city query (e.g. "ROM" maps to "FCO" via getCodesForCityQuery)
+    // Valid airport code vs city query (e.g. "ROM" → FCO via getCodesForCityQuery).
     const airportExists = !!getCityName(dest) && getCityName(dest) !== dest;
     if (airportExists) {
       destCodes = [dest];
@@ -107,9 +95,7 @@ export const resolveDestCodes = (intent: IntentJSON): string[] => {
   return destCodes;
 };
 
-// Round trip: filter each direction on its own terms (destination matching
-// differs for outbound vs return, see step 3 below), then merge and re-sort
-// as one list.
+// Round trip: filter each direction separately (dest matching differs), then merge.
 const sortFlights = (flights: Flight[], sortBy?: IntentJSON['sort_by']): Flight[] => {
   const by = sortBy || 'cheapest';
   return [...flights].sort((a, b) => {
@@ -127,13 +113,7 @@ const sortFlights = (flights: Flight[], sortBy?: IntentJSON['sort_by']): Flight[
   });
 };
 
-// A round trip with two distinct dates close enough together to be a real
-// trip (not a flexible search window like "in September") means the FIRST
-// date is the outbound leg and the SECOND is the return leg — not "search
-// both directions across the whole span." Flexible windows ("in September" ≈
-// 30 days, "next 3 months" ≈ 90 days) are comfortably longer than any real
-// trip, so a day-span cap is enough to tell the two apart without a new
-// explicit flag from the model.
+// Close date_from/date_to on direction=both → pin each leg (not a flexible window).
 const MAX_ITINERARY_SPAN_DAYS = 21;
 
 const daySpan = (from: string, to: string): number => {
@@ -149,14 +129,7 @@ export const isRoundTripItinerary = (intent: IntentJSON): boolean =>
   daySpan(intent.date_from, intent.date_to) > 0 &&
   daySpan(intent.date_from, intent.date_to) <= MAX_ITINERARY_SPAN_DAYS;
 
-/**
- * Today as YYYY-MM-DD in LOCAL time — the first day an undated search may
- * return. Deliberately not toISOString(), which is UTC and rolls the day early
- * in positive-offset zones (a 00:30 BST search would otherwise be bounded at
- * yesterday). Mirrors dashboard-ui's todayKey(). Exported so the "Assumed
- * dates" badge can label the exact bound the filter applied, rather than
- * describing a window the search did not use.
- */
+/** Today YYYY-MM-DD in local time (not toISOString — UTC would roll early in BST). */
 export const searchStartDate = (): string => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -168,9 +141,7 @@ export const filterAndSortFlights = (
   medianCo2: number
 ): Flight[] => {
   if (intent.direction === 'both') {
-    // Two distinct, close-together dates: pin outbound to the first date and
-    // return to the second, reusing the exact-single-date path (`intent.date`
-    // already takes priority over the date_from/date_to range below).
+    // Pin outbound to date_from and return to date_to via intent.date.
     if (isRoundTripItinerary(intent)) {
       const outbound = filterAndSortFlights(
         flights,
@@ -192,14 +163,11 @@ export const filterAndSortFlights = (
 
   let filtered = [...flights];
 
-  // 1. Direction (Default: outbound if not mentioned).
-  // NOTE: return rows in the dataset fly EU -> London, so for direction
-  // "return" the searched city matches the row's ORIGIN, not its destination.
+  // Return rows are EU→London: searched city matches origin, not dest.
   const direction = intent.direction || 'outbound';
   filtered = filtered.filter((f) => f.direction === direction);
 
-  // 2. Origin Airport: If specified, match it. If not, include all (no filter).
-  // A London airport code always refers to the London end of the journey.
+  // Origin: London codes always mean the London end of the journey.
   if (intent.origin_code && intent.origin_code.trim()) {
     const origin = intent.origin_code.trim().toUpperCase();
     if (direction === 'return' && LONDON_CODES.has(origin)) {
@@ -209,7 +177,6 @@ export const filterAndSortFlights = (
     }
   }
 
-  // 3. Destination Code or City
   const destCodes = resolveDestCodes(intent);
 
   if (destCodes.length > 0) {
@@ -217,7 +184,7 @@ export const filterAndSortFlights = (
     const euSide = destCodes.filter((c) => !LONDON_CODES.has(c));
     filtered = filtered.filter((f) => {
       if (direction === 'return') {
-        // Return legs: EU city is the row's origin; London is the row's destination
+        // Return: EU city = origin; London = dest
         return (
           (euSide.length > 0 && euSide.includes(f.origin_code)) ||
           (londonSide.length > 0 && londonSide.includes(f.dest_code))
@@ -232,7 +199,7 @@ export const filterAndSortFlights = (
     );
   }
 
-  // 3b. Eastern Europe region allowlist (open explore with no single city).
+  // Eastern Europe allowlist (open explore, no single city).
   if (intent.dest_region === 'eastern_europe' && destCodes.length === 0) {
     const region = easternEuropeAirportCodes();
     filtered = filtered.filter((f) =>
@@ -240,7 +207,7 @@ export const filterAndSortFlights = (
     );
   }
 
-  // 4. Date: single day, or an inclusive date range (YYYY-MM-DD strings compare safely)
+  // Date: single day or inclusive YYYY-MM-DD range
   if (intent.date && intent.date.trim()) {
     const dateQuery = intent.date.trim();
     filtered = filtered.filter((f) => f.date === dateQuery);
@@ -253,20 +220,13 @@ export const filterAndSortFlights = (
       const to = intent.date_to.trim();
       filtered = filtered.filter((f) => f.date <= to);
     }
-    // No date given at all: the search used to match every row in the dataset,
-    // which includes days that have already departed — the dataset starts
-    // before today and is only periodically shifted forward. Those fares are
-    // not bookable, so an undated search silently offered dead flights (and
-    // could name one as the cheapest). Bound it at today instead. Only applies
-    // when the user named NO date: an explicit date, or either end of an
-    // explicit range, is honoured exactly as before, including into the past.
+    // Undated: bound at today so departed fares aren't returned as cheapest.
     if (!intent.date_from?.trim() && !intent.date_to?.trim()) {
       const start = searchStartDate();
       filtered = filtered.filter((f) => f.date >= start);
     }
   }
 
-  // 5. Max Price (GBP)
   if (intent.max_price !== undefined && intent.max_price !== null) {
     const maxVal = Number(intent.max_price);
     if (!isNaN(maxVal)) {
@@ -274,7 +234,6 @@ export const filterAndSortFlights = (
     }
   }
 
-  // 6. Stops
   if (intent.stops !== undefined && intent.stops !== null) {
     const stopsVal = Number(intent.stops);
     if (!isNaN(stopsVal)) {
@@ -282,20 +241,16 @@ export const filterAndSortFlights = (
     }
   }
 
-  // 6b. Weekend departures (Fri/Sat/Sun), OUTBOUND only. The itinerary builder
-  // applies its own stricter Fri/Sat + Sun/Mon pairing on top of this; return
-  // legs are deliberately left alone so those pairs still resolve.
+  // Weekend Fri–Sun, outbound only (itinerary pairs return separately).
   if (intent.weekend && direction === 'outbound') {
     filtered = filtered.filter((f) => isWeekendDeparture(f.date));
   }
 
-  // 7. Cabin Class (Case-insensitive matching)
   if (intent.cabin_class && intent.cabin_class.trim()) {
     const cabin = intent.cabin_class.trim().toLowerCase();
     filtered = filtered.filter((f) => f.cabin_class.toLowerCase() === cabin);
   }
 
-  // 8. Departure Time Bounds (using minutes from midnight helper)
   const depAfterMins = parseTimeToMins(intent.departure_after);
   if (depAfterMins !== null) {
     filtered = filtered.filter((f) => f.departure_mins_from_midnight >= depAfterMins);
@@ -306,10 +261,9 @@ export const filterAndSortFlights = (
     filtered = filtered.filter((f) => f.departure_mins_from_midnight <= depBeforeMins);
   }
 
-  // 9. Flexibility Policy
   if (intent.flexibility && intent.flexibility.trim()) {
     const flex = intent.flexibility.trim().toLowerCase();
-    // Normalize to exact CSV terms
+    // Normalize to CSV terms
     let matchStr = flex;
     if (flex.includes('changeable')) {
       matchStr = 'changeable for a fee';
@@ -322,12 +276,10 @@ export const filterAndSortFlights = (
     filtered = filtered.filter((f) => f.flexibility_policy.toLowerCase() === matchStr);
   }
 
-  // 10. Low Emissions (CO2 <= Median CO2 of the dataset)
   if (intent.low_co2) {
     filtered = filtered.filter((f) => f.co2_kg <= medianCo2);
   }
 
-  // 11. Airline Name (Case-insensitive substring match)
   if (intent.airline && intent.airline.trim()) {
     const airlineQuery = intent.airline.trim().toLowerCase();
     filtered = filtered.filter((f) => 
@@ -335,7 +287,6 @@ export const filterAndSortFlights = (
     );
   }
 
-  // 12. Sorting
   return sortFlights(filtered, intent.sort_by);
 };
 

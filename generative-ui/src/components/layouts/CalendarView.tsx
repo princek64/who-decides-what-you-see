@@ -24,15 +24,13 @@ const suggestReturnDate = (outboundIso: string, weekend?: boolean): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-// Static month grid(s) of cheapest fares per day, tercile-tinted like the
-// dashboard's price calendar; weekend days carry a dot marker.
+// Month grid of cheapest fares per day; weekend days marked.
 export const CalendarView: React.FC<{
   flights: Flight[];
   intent: IntentJSON;
   onRefine?: (patch: Partial<IntentJSON & { layout?: string }>, label: string) => void;
 }> = ({ flights, intent, onRefine }) => {
-  // Every hook below runs unconditionally — the empty-results guard sits after
-  // them, not between them, or the hook order changes between renders.
+  // Hooks run unconditionally; empty-results guard comes after.
   const prices = useMemo(() => cheapestByDate(flights), [flights]);
   const dates = useMemo(() => Object.keys(prices).sort(), [prices]);
 
@@ -42,9 +40,7 @@ export const CalendarView: React.FC<{
     return [vals[Math.floor(vals.length / 3)], vals[Math.floor((vals.length * 2) / 3)]];
   }, [prices]);
 
-  // Cheapest weekend-break day across the window — Fri/Sat/Sun, matching
-  // isWeekendDeparture in the filter (and explicit "Friday–Sunday" wording).
-  // Sat/Sun-only used to ignore Friday even when the user asked Fri–Sun.
+  // Cheapest Fri/Sat/Sun day in the window (matches isWeekendDeparture).
   const cheapestWeekend = useMemo(() => {
     let best: Flight | null = null;
     for (const d of dates) {

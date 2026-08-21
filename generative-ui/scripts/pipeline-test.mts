@@ -1,7 +1,6 @@
 /**
- * End-to-end test of the generative pipeline against the 5 research tasks:
- * real system prompt, real filter code, real layout adapters, live Groq.
- * Run from generative-ui/:  npx tsx scripts/pipeline-test.mts
+ * E2E generative pipeline vs 5 research tasks (real prompt/filter/layouts + Groq).
+ * Run: npx tsx scripts/pipeline-test.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

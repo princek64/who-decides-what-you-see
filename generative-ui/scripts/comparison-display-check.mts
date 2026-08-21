@@ -1,14 +1,5 @@
 /**
- * Offline check of the comparison layout (no Groq calls).
- *
- * The bug: the comparison screen rendered exactly ONE direct and ONE connecting
- * flight and dropped the rest without a word, so a participant who had seen six
- * results asked why only two were left. These assertions pin that every
- * qualifying flight is now accounted for, grouped by stop count, cheapest
- * first, and that the recommendation reads AFTER the options rather than before
- * them.
- *
- * Driven by the scripted task: Rome, 15 November, direct vs one-stop.
+ * Offline comparison layout: all flights grouped by stops; verdict after options.
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -13,11 +13,8 @@ import {
 } from './returnGroups';
 import type { LegGroups } from './returnGroups';
 
-/** Kept for callers/tests that still import it; no longer gates lead wording. */
-export const LARGE_RESULT_THRESHOLD = 30;
-
 export const TABLE_MIN_RESULTS = 4;
-/** Rows/bullets shown — the app never offers a way to dump the full result set. */
+/** Preview rows — app never dumps the full set unless showAll. */
 export const TABLE_PREVIEW_ROWS = 6;
 
 export type ProseNode =
@@ -26,8 +23,7 @@ export type ProseNode =
   | { type: 'flight'; text: string; flight: Flight }
   | { type: 'link'; text: string; href: string };
 
-// Dummy booking URL — this is a research prototype, not a real booking flow;
-// the link only needs to show that clicking through to book is the next step.
+/** Dummy booking URL for the research prototype. */
 export const bookingHref = (f: Flight): string =>
   `https://www.${f.airline_name.toLowerCase().replace(/[^a-z0-9]+/g, '')}.example/book/${f.flight_id}`;
 
@@ -49,8 +45,7 @@ export interface ProseAnswer {
   closing: ProseBlock[];
   text: string;
   table: Flight[] | null;
-  /** Set INSTEAD of `table` on a round trip: outbound first, return second,
-   *  each labelled, so the two legs are never one undifferentiated list. */
+  /** Round trip: outbound then return labelled tables (instead of `table`). */
   tableGroups: ProseTableGroup[] | null;
   tableShowsDate: boolean;
   displayed: number;
@@ -58,30 +53,19 @@ export interface ProseAnswer {
 }
 
 export interface ProseOptions {
-  /** @deprecated No longer hides connecting flights — kept so call sites compile. */
-  keepStops?: boolean;
-  /** Explicit compare turn — never collapse to directs-only in the answer. */
-  compare?: boolean;
-  /** The user asked to see everything ("show me all options"). Lays the whole
-   *  result set out as a table instead of summarising a preview of it. */
+  /** "Show all" — full table instead of a preview summary. */
   showAll?: boolean;
-  /** Insight preface already named the cheapest pair — don't repeat it above
-   *  the leg tables (cheapest-weekend / cheapest-when answers). */
+  /** Insight already named the cheapest pair — skip repeating it above leg tables. */
   skipPairLead?: boolean;
 }
 
 /**
- * Ceiling on rows rendered for an explicit "show me all" request.
- *
- * "All" is taken literally up to this point. Past it the honest thing is to say
- * how many there are rather than to render them: the thread is not virtualised,
- * so an undated "anywhere" search (which can match thousands) would lock the tab
- * trying to lay out every row, and a list that long stops being readable well
- * before it stops being expensive.
+ * Cap for explicit "show all" — beyond this, state the count rather than render
+ * (undated anywhere can match thousands; thread is not virtualised).
  */
 export const SHOW_ALL_MAX_ROWS = 100;
 
-// "London Gatwick" -> "Gatwick"; unknown codes fall back to the code itself.
+// "London Gatwick" → "Gatwick"; unknown codes fall back to the code.
 const airportLabel = (code: string): string => {
   const full = AIRPORT_TO_CITY[code];
   if (!full) return code;
@@ -119,8 +103,7 @@ export const describeConstraints = (intent: IntentJSON): string => {
     if (intent.date_from === intent.date_to) {
       dateInfo = ` on ${formatFlightDate(intent.date_from)}`;
     } else if (isRoundTripItinerary(intent)) {
-      // Two close-together dates on a round trip are an outbound/return pair,
-      // not a flexible window — say so plainly rather than "between X and Y".
+      // Round-trip date pair — not a flexible "between X and Y" window.
       dateInfo = ` — outbound ${formatFlightDate(intent.date_from)}, return ${formatFlightDate(intent.date_to)}`;
     } else {
       dateInfo = ` between ${formatFlightDate(intent.date_from)} and ${formatFlightDate(intent.date_to)}`;
@@ -164,8 +147,6 @@ const flightBullet = (f: Flight, withDate: boolean, withDest: boolean): ProseNod
   ];
 };
 
-// The single-result case reads as two short sentences — route/date, then
-// times/price — rather than one clause carrying every fact at once.
 const flightRouteSentence = (f: Flight, withDate: boolean, withDest: boolean): ProseNode[] => [
   { type: 'text', text: "It's " },
   { type: 'flight', text: `${f.airline_name} ${f.flight_number}`, flight: f },
@@ -250,7 +231,7 @@ const buildFollowUpQuestion = (
       ? picked[0]
       : `${picked.slice(0, -1).join(', ')}, or ${picked[picked.length - 1]}`;
 
-  // Deterministic rotation: same query, same opener; different queries vary.
+  // Deterministic opener rotation from query seed.
   const openers = ['Want me to', 'Would you like me to', 'Shall I'];
   const seed = `${intent.dest_code ?? ''}${intent.dest_city ?? ''}${intent.date ?? ''}${results.length}`;
   let hash = 0;
@@ -273,18 +254,8 @@ const nodesToMarkdown = (nodes: ProseNode[]): string =>
     .join('');
 
 /**
- * Round-trip answer: the two legs as two labelled tables rather than one merged
- * price-sorted list. filterAndSortFlights returns outbound and inbound already
- * interleaved, so without this the reader sees London → Paris and Paris →
- * London rows alternating with nothing to tell them apart.
- *
- * The closing line prices the trip as a trip — cheapest outbound plus cheapest
- * return — which is the number a round-trip search is actually asking for, and
- * which no single row in either table shows.
- *
- * `showAll` lifts the per-leg preview cap for an explicit "show me all options".
- * The grouping still applies: a round trip asked for in full wants every flight
- * on each leg, not both legs poured back into one flat list.
+ * Round trip: labelled outbound/return tables (filter merges legs into one list).
+ * Closing prices cheapest out + cheapest back. showAll raises the per-leg cap.
  */
 const buildRoundTripAnswer = (
   results: Flight[],
@@ -299,9 +270,7 @@ const buildRoundTripAnswer = (
   const outVisible = legs.outbound.slice(0, perLeg);
   const inVisible = legs.inbound.slice(0, perLeg);
 
-  // A leg with no flights is stated rather than silently missing: an empty
-  // table under a heading reads as a loading failure, and the reader needs to
-  // know WHICH half of the trip has nothing before the totals make sense.
+  // Empty leg stated explicitly — blank table under a heading looks like a load failure.
   const missing =
     legs.outbound.length === 0
       ? 'outbound'
@@ -315,8 +284,7 @@ const buildRoundTripAnswer = (
       ? `Options on each leg${constraints}:`
       : `Here is the round trip${constraints} — ${plural(legs.outbound.length, 'outbound flight')} and ${plural(legs.inbound.length, 'return flight')}:`;
 
-  // Verdict first (bold total), then the leg options — so the trip price is not
-  // buried under two tables. Skipped when a cheapest-when preface already said it.
+  // Verdict (bold total) before leg options; skipped when preface already said it.
   const pair = cheapestPair(legs);
   const blocks: ProseBlock[] = [];
   if (pair && !skipPairLead) {
@@ -365,8 +333,7 @@ const buildRoundTripAnswer = (
     });
   }
 
-  // Dates vary across a round trip by definition (the legs are on different
-  // days), so the date column always earns its place here.
+  // Round-trip legs are on different days — always show the date column.
   const tableGroups: ProseTableGroup[] = [
     { label: outboundLabel(destination), flights: outVisible, available: legs.outbound.length },
     { label: returnLabel(destination), flights: inVisible, available: legs.inbound.length },
@@ -384,23 +351,13 @@ const buildRoundTripAnswer = (
   };
 };
 
-/**
- * The whole result set as one table, for an explicit "show me all options".
- *
- * Runs ahead of every shaping rule below, and deliberately so. The direct-only
- * display rule, the bullets-vs-table switch and the TABLE_PREVIEW_ROWS cap all
- * exist to keep a FIRST answer short; applied to a request for everything they
- * would hide part of the answer the user just asked to see in full. The lead
- * sentence states the count so the list is anchored, and the closing line still
- * names the cheapest, which is the one thing a long table buries.
- */
+/** Full result table for explicit "show all" — skips first-answer preview shaping. */
 const buildShowAllAnswer = (results: Flight[], intent: IntentJSON): ProseAnswer => {
   const visible = results.slice(0, SHOW_ALL_MAX_ROWS);
   const truncated = results.length > visible.length;
   const constraints = describeConstraints(intent);
   const cheapest = cheapestBy(results) as Flight;
-  // Dates are shown per row whenever the set spans more than one, so a full
-  // list never leaves a row ambiguous about which day it is.
+  // Multi-day sets need a per-row date.
   const withDate = new Set(results.map((f) => f.date)).size > 1;
 
   const lead = truncated
@@ -427,14 +384,7 @@ export const buildProseAnswer = (
   intent: IntentJSON,
   opts: ProseOptions = {}
 ): ProseAnswer => {
-  // Round trips split into labelled legs before any of the one-way shaping
-  // below runs. The direct-only display rule in particular must not apply here:
-  // dropping the connecting flights from one leg only would silently answer a
-  // different question on each half of the trip.
-  //
-  // This is checked BEFORE showAll: "show me all options" on a round trip means
-  // every flight on each leg, still labelled. Flattening them into one table
-  // would hand back exactly the interleaved list the grouping exists to undo.
+  // Two-way before showAll so "all options" stays labelled per leg.
   if (isTwoWayResult(intent) && results.length > 0) {
     return buildRoundTripAnswer(
       results,
@@ -447,10 +397,7 @@ export const buildProseAnswer = (
 
   if (opts.showAll && results.length > 0) return buildShowAllAnswer(results, intent);
 
-  // Show the full filtered set — same content generative-ui gets. Presentation
-  // may still preview TABLE_PREVIEW_ROWS; connecting flights are no longer
-  // silently dropped when the set is mixed. (opts.keepStops / opts.compare are
-  // retained for call-site compatibility; they no longer gate this filter.)
+  // Full filtered set (no silent direct-only collapse).
   const shown = results;
 
   const count = shown.length;
@@ -463,8 +410,7 @@ export const buildProseAnswer = (
   const withDest = isBroad || new Set(shown.map((f) => f.dest_code)).size > 1;
 
   const cheapest = cheapestBy(shown) as Flight;
-  // Always name the true total (parity with generative "Found N …"), even when
-  // the list below is truncated to a preview.
+  // Name the true total even when the list below is a preview.
   const found = `Found ${plural(count, `${stopWord}flight`)}${constraints}`;
   const blocks: ProseBlock[] = [];
 
@@ -536,7 +482,7 @@ export const buildProseAnswer = (
       },
     ],
   });
-  // The recommendation goes UNDER the table, where the reader lands.
+  // Recommendation under the table.
   const closing: ProseBlock[] = [
     { kind: 'paragraph', nodes: [...cheapestLine(cheapest), ...askNodes] },
   ];

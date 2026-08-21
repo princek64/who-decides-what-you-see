@@ -10,8 +10,7 @@ import {
 import { FlightRow } from './FlightRow';
 import { PlaneTakeoff, PlaneLanding } from 'lucide-react';
 
-/** Rows per leg. Both legs stay on one screen at this size, which is the point
- *  — the comparison the reader is making is between the two groups. */
+/** Rows per leg so both groups stay visible for side-by-side comparison. */
 const ROWS_PER_LEG = 5;
 
 const Leg: React.FC<{
@@ -50,18 +49,8 @@ const Leg: React.FC<{
 };
 
 /**
- * Round-trip results as two labelled groups instead of one merged list.
- *
- * filterAndSortFlights runs the outbound and inbound searches separately, then
- * merges and re-sorts them into a single price-ordered array. Handed to any of
- * the flat list layouts, that puts London → Paris and Paris → London rows next
- * to each other with nothing marking which is which — testing participants
- * could not tell the legs apart. Splitting the list back out and heading each
- * half with the direction it flies is the whole fix.
- *
- * The trip total underneath is the cheapest outbound plus the cheapest return.
- * It is the number a round-trip search is really asking for, and it appears on
- * no individual row in either group.
+ * Round-trip results as two labelled groups (outbound / return).
+ * Trip total = cheapest outbound + cheapest return.
  */
 export const ReturnGroupedView: React.FC<{
   flights: Flight[];

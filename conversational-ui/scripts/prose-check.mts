@@ -1,11 +1,5 @@
 /**
- * Offline check of the chat's prose answers (no Groq calls).
- *
- * Builds hand-written intents against the real dataset and prints the sentence
- * the thread would say, so the wording can be read before a participant does.
- * Asserts the two things the prose must never get wrong: the quoted "cheapest"
- * is the minimum BY PRICE of the result set, and a table only appears past
- * TABLE_MIN_RESULTS results, and only when they are all the same kind.
+ * Offline prose check: cheapest = min price; table only past TABLE_MIN_RESULTS.
  */
 import fs from 'node:fs';
 import path from 'node:path';

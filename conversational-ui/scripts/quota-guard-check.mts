@@ -1,8 +1,6 @@
 /**
- * Offline checks for study-task golden slots (skip Groq) and TPD vs TPM
- * rate-limit policy. No network.
- *
- * Run from conversational-ui/:  npx tsx scripts/quota-guard-check.mts
+ * Offline: study-task golden slots + TPD vs TPM rate-limit policy.
+ * Run: npx tsx scripts/quota-guard-check.mts
  */
 import {
   friendlyApiError,

@@ -1,19 +1,14 @@
-// Kept in sync with the canonical CSV's actual date span (see
-// data/verify_dataset.py) — the dataset gets periodically shifted forward so
-// searches never land on past dates; update these two whenever that happens.
+// Dataset date span (see data/verify_dataset.py); update when the CSV is shifted forward.
 export const DATA_MIN = '2026-08-05';
 export const DATA_MAX = '2027-02-04';
 
-// The real "today", clamped into the dataset window so relative dates and the
-// empty-state example chips always resolve to searchable (future) flights.
+// "Today" clamped into the dataset window for relative dates and example chips.
 export const getSearchAnchor = (): string => {
   const todayStr = new Date().toISOString().slice(0, 10);
   return todayStr < DATA_MIN ? DATA_MIN : todayStr > DATA_MAX ? DATA_MAX : todayStr;
 };
 
-// A future example date (anchor + daysAhead), clamped to the dataset window,
-// formatted as "24 July" for the empty-state suggestion chips. Kept entirely in
-// local time — a toISOString() round-trip would shift the day in non-UTC zones.
+// Example chip date (anchor + daysAhead), clamped; local time only (avoid toISOString day shift).
 export const exampleChipDate = (daysAhead: number): string => {
   const d = new Date(`${getSearchAnchor()}T00:00:00`);
   d.setDate(d.getDate() + daysAhead);
@@ -22,9 +17,7 @@ export const exampleChipDate = (daysAhead: number): string => {
   return chip.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
 };
 
-// Layouts the model may choose from. "alert" is intentionally NOT here:
-// the model cannot know the result count, so the app switches to the
-// alert view itself whenever a search returns zero flights.
+// Model-choosable layouts. "alert" is app-only (zero results).
 export const MODEL_LAYOUTS = [
   'highlight',
   'grid',
@@ -42,16 +35,14 @@ export const MODEL_LAYOUTS = [
 export type ModelLayout = (typeof MODEL_LAYOUTS)[number];
 export type Layout = ModelLayout | 'alert';
 
-// The LLM has no idea what "today", "this weekend" or "next month" mean unless
-// we tell it. Built at call time so every session gets the real current date.
+// Inject today's date into the prompt at call time.
 export const buildSystemPrompt = (): string => {
   const now = new Date();
   const weekday = now.toLocaleDateString('en-GB', { weekday: 'long' });
-  // If the app is used outside the dataset window, anchor "today" to the window
-  // so relative dates still resolve to searchable flights.
+  // Outside the dataset window, clamp "today" so relative dates stay searchable.
   const anchor = getSearchAnchor();
 
-  // Pre-computed "+3 months" bound for the flexible-date example below
+  // "+3 months" bound for flexible-date example below
   const anchorDate = new Date(`${anchor}T00:00:00`);
   anchorDate.setMonth(anchorDate.getMonth() + 3);
   let anchorPlus3 = anchorDate.toISOString().slice(0, 10);

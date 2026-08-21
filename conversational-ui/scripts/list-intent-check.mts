@@ -1,13 +1,5 @@
 /**
- * Offline check of the "show me all options" list intent (no Groq calls).
- *
- * The reported failure: after a search, asking to see everything produced
- * another prose summary — one participant asked twice and got the same answer
- * both times. Nothing in the pipeline treated "all" as a display request, so the
- * answer stayed capped at TABLE_PREVIEW_ROWS.
- *
- * These assertions cover the two halves of the fix: which wordings are
- * recognised, and what the answer looks like once one is.
+ * Offline: "show me all options" list intent (wordings + answer layout).
  */
 import fs from 'node:fs';
 import path from 'node:path';

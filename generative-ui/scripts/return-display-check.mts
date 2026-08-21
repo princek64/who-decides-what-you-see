@@ -1,14 +1,5 @@
 /**
- * Offline check of the round-trip display (no Groq calls).
- *
- * Renders the REAL dispatcher (GenResponse) against the REAL dataset and reads
- * the markup, so this covers both halves of the fix: that a round trip is
- * routed away from the flat list layouts, and that what replaces them actually
- * labels and separates the two legs.
- *
- * The bug: filterAndSortFlights merges the outbound and inbound results into
- * one price-sorted array, so any flat layout interleaves London → Paris and
- * Paris → London rows with nothing saying which is which.
+ * Offline round-trip display via GenResponse: labelled legs, not a flat merge.
  */
 import fs from 'node:fs';
 import path from 'node:path';

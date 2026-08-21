@@ -1,95 +1,77 @@
 # Who Decides What You See?
 
-Three flight-search interfaces built for an MA dissertation comparing an
-opinionated dashboard, a conversational interface, and a generative UI in a
-within-subjects usability study. All three run over the same synthetic dataset
-(London → Europe, 2026-07-01 to 2026-12-31) and log participant sessions to JSON
-for analysis.
+MA dissertation project: three flight-search UIs over the same dataset, used in a within-subjects study.
 
-## Structure
+1. **Dashboard** — normal filter / sort UI (control)
+2. **Conversational** — chat with a fixed results layout
+3. **Generative** — chat where the model also picks how results are shown
 
-- `data/` — the shared synthetic flight dataset used by all three apps
-- `dashboard-ui/` — faceted filter-and-sort dashboard (control)
-- `conversational-ui/` — chat interface, fixed result layout (Groq / Llama)
-- `generative-ui/` — chat interface, LLM-chosen result layout (Groq / Llama)
+All three search London → Europe on synthetic flights (1 Jul – 31 Dec 2026) and can export session logs as JSON.
 
-Each app is an independent Vite project. On build it copies the canonical CSV
-from `data/` into its own `public/` (a `prebuild` step), then runs standalone.
-See each app's `README.md` and `DESIGN.md` for details.
+## Repo layout
 
-| App | Paradigm | LLM |
+| Folder | What it is | LLM |
 |---|---|---|
-| [`dashboard-ui/`](dashboard-ui) | Conventional filter-and-sort dashboard (control) | none |
-| [`conversational-ui/`](conversational-ui) | Natural-language chat, fixed result layout | Groq `openai/gpt-oss-20b` |
-| [`generative-ui/`](generative-ui) | Natural-language chat, LLM-chosen result layout | Groq `openai/gpt-oss-20b` |
+| `data/` | Shared flight CSV | — |
+| [`dashboard-ui/`](dashboard-ui) | Filter-and-sort dashboard | none |
+| [`conversational-ui/`](conversational-ui) | Chat, fixed layout | Groq `openai/gpt-oss-20b` |
+| [`generative-ui/`](generative-ui) | Chat, layout chosen per query | Groq `openai/gpt-oss-20b` |
 
-All three share one design system (Geist dark).
+Each app is its own Vite project. On build, `prebuild` copies the CSV from `data/` into that app’s `public/`. More detail lives in each app’s `README.md` / `DESIGN.md`.
+
+UI look is shared (Geist, dark).
 
 ## Dataset
 
-`data/ux_research_flights_h2_2026_final.csv` (~163k rows, ~36 MB) is the single
-source of truth, committed once. Each app's `prebuild` script copies it into that
-app's `public/` at build time, so the three `public/` copies are gitignored and
-never drift.
+Canonical file: `data/ux_research_flights_h2_2026_final.csv` (~163k rows, ~36 MB). The copies under each `public/` are gitignored so they don’t drift.
 
-To regenerate it deterministically (seed 42):
+Regenerate (seed 42):
 
 ```bash
 python -m venv venv && source venv/bin/activate
-python generate_flights_2026.py                 # writes the CSV
-mv ux_research_flights_h2_2026_final.csv data/   # replace the canonical copy
+python generate_flights_2026.py
+mv ux_research_flights_h2_2026_final.csv data/
 ```
 
-Local dev reads whatever is already in each `public/`. After a fresh clone, run
-`npm run prebuild` once in an app (or just `npm run build`) to populate it.
+After a fresh clone, run `npm run prebuild` (or `npm run build`) once in an app so `public/` gets the CSV.
 
-Notes for anyone analysing the CSV: `layover_details` contains commas
-(`"FRA, Frankfurt, Germany, 2h 32m"`), so parse with a real CSV reader, never
-`split(',')`. Return-direction rows fly EU → London, so the searched city matches
-the row's **origin** and London its **destination**.
+If you’re analysing the CSV yourself: `layover_details` has commas inside quotes, so use a proper CSV parser. Return rows are EU → London (city is on **origin**, London on **destination**).
 
-## Running an app
+## Run an app
 
 ```bash
-cd dashboard-ui        # or conversational-ui / generative-ui
+cd dashboard-ui   # or conversational-ui / generative-ui
 npm install
 npm run dev
 ```
 
-The two chat apps need a Groq API key. Copy `.env.example` to `.env` and add yours:
+Chat apps need a Groq key:
 
 ```bash
 cp .env.example .env
+# set VITE_GROQ_API_KEY=...
 ```
 
-> The key is read through `VITE_GROQ_API_KEY`, which Vite **inlines into the client
-> bundle** at build time. That is acceptable for this research prototype but is not a
-> production pattern — use a throwaway, rate-limited key, and rotate it after the study.
+Vite inlines `VITE_GROQ_API_KEY` into the client bundle. Fine for this study prototype — use a throwaway key and rotate it afterwards.
 
-## Deployment (Vercel)
+## Deploy (Vercel)
 
-The repo is a monorepo. Each app is imported as its own Vercel project pointing at
-this same repo, with **Root Directory** set to the app folder
-(`dashboard-ui` / `conversational-ui` / `generative-ui`). Vercel clones the whole
-repo, so each app's `prebuild` reaches `../data` and copies the CSV. Set
-`VITE_GROQ_API_KEY` in each project's environment variables.
+One Vercel project per app, same Git repo, **Root Directory** set to `dashboard-ui`, `conversational-ui`, or `generative-ui`. `prebuild` still reaches `../data`. Put `VITE_GROQ_API_KEY` in the project env for the chat apps.
 
 ## Session logs
 
-Press **Shift + E** in any app to export the current participant session as JSON.
-The event schemas are fixed (`filter_change` / `card_click` / `detail_view` in the
-dashboard; `user_message` / `ai_response` / `card_click` / `show_all_results` in the
-chat apps) because they are the dissertation's raw data.
+**Shift + E** exports the current session as JSON.
 
-## Testing the chat pipelines
+Event names are fixed on purpose (dissertation data):
 
-Both chat apps carry intent-extraction test scripts that hit the live Groq API:
+- Dashboard: `filter_change`, `card_click`, `detail_view`
+- Chat apps: `user_message`, `ai_response`, `card_click`, `show_all_results`
+
+## Pipeline smoke tests
 
 ```bash
 cd conversational-ui   # or generative-ui
 npx tsx scripts/pipeline-test.mts
 ```
 
-Groq's free tier allows roughly two calls per minute at these prompt sizes, so the
-scripts back off on HTTP 429.
-# who-decides-what-you-see
+These hit live Groq. Free tier is slow at these prompt sizes; the scripts back off on 429s.

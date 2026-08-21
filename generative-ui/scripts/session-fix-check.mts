@@ -1,8 +1,6 @@
 /**
- * Offline checks for generative session fixes (DE months, Fri–Sun calendar
- * logic, reset, region, next-month window).
- *
- * Run from generative-ui/:  npx tsx scripts/session-fix-check.mts
+ * Offline generative session fixes: DE months, Fri–Sun, reset, region, next-month.
+ * Run: npx tsx scripts/session-fix-check.mts
  */
 import { dateFromText } from '../src/lib/returnLeg';
 import {

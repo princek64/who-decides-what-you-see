@@ -1,7 +1,6 @@
 /**
  * Destination cards must never list London airports (return-leg dest_codes).
- *
- * Run from generative-ui/:  npx tsx scripts/dest-cards-check.mts
+ * Run: npx tsx scripts/dest-cards-check.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

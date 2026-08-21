@@ -2,8 +2,7 @@ import React from 'react';
 import type { Flight, IntentJSON } from '../../hooks/useFlightFilter';
 import { FlightRow } from './FlightRow';
 
-// Top pick measured against the stated budget, with a spend bar and
-// the money left over — then what else still fits.
+// Top pick vs budget (spend bar + leftover), then other fits.
 export const BudgetView: React.FC<{
   flights: Flight[];
   intent: IntentJSON;

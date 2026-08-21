@@ -3,8 +3,7 @@ import type { Flight } from '../../hooks/useFlightFilter';
 import { bookingHref } from '../../lib/utils';
 import { Plane } from 'lucide-react';
 
-// Compact clickable flight row shared by several layouts
-// (ranked list, budget list, alert alternatives, highlight alternates).
+// Compact clickable flight row shared by several layouts.
 export const formatRowDate = (dateStr: string): string => {
   const d = new Date(`${dateStr}T00:00:00`);
   return isNaN(d.getTime())
@@ -18,9 +17,7 @@ export const FlightRow: React.FC<{
   prefix?: React.ReactNode;
   suffix?: React.ReactNode;
 }> = ({ flight, onSelect, prefix, suffix }) => (
-  // A real <a> for the booking link needs to sit inside this row, and <a> is
-  // not valid content inside a <button>, so the row is a div with a button
-  // role instead (onSelect still opens the detail modal on click/Enter/Space).
+  // div+button role so a real booking <a> can sit inside (invalid inside <button>).
   <div
     role="button"
     tabIndex={0}
@@ -40,9 +37,7 @@ export const FlightRow: React.FC<{
         {flight.flight_number} · {formatRowDate(flight.date)}
       </div>
     </div>
-    {/* Route/times: inline on ≥sm, but its own full-width line on phones. The
-        children are shrink-0 and don't wrap, so keeping them on the airline↔price
-        line overflowed and overlapped the price at iPhone widths (375–414px). */}
+    {/* Route/times: full-width on phones, inline from sm up. */}
     <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1 flex items-center gap-2 min-w-0">
       <span className="text-sm font-mono tabular-nums font-semibold text-foreground shrink-0">{flight.departure_time}</span>
       <span className="text-[10px] font-mono font-medium text-muted-foreground shrink-0">{flight.origin_code}</span>

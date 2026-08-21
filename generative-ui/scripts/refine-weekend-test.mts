@@ -1,9 +1,6 @@
 /**
- * OFFLINE checks (no Groq) for the three end-to-end fixes:
- *   1. Refinement chips compose onto the prior intent (issue 1)
- *   2. Summaries carry human dates, never ISO (issue 2)
- *   3. "weekend" itineraries depart Fri/Sat and return Sun/Mon (issue 3)
- * Run from generative-ui/:  npx tsx scripts/refine-weekend-test.mts
+ * Offline: chip refine compose, human dates in summaries, Fri/Sat→Sun/Mon weekends.
+ * Run: npx tsx scripts/refine-weekend-test.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

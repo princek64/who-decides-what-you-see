@@ -1,6 +1,6 @@
 /**
- * Reproduce the "every destination shows the same price" bug.
- * Run from generative-ui/:  npx tsx scripts/dest-price-test.mts
+ * Reproduce "every destination shows the same price".
+ * Run: npx tsx scripts/dest-price-test.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

@@ -3,22 +3,13 @@ import type { ChatMessage } from '../hooks/useGenChat';
 import { getCityName } from '../lib/airportMap';
 import { ChevronDown, ChevronUp, History } from 'lucide-react';
 
-/**
- * A superseded screen, collapsed to one line.
- *
- * The canvas renders a single generated screen, so until now a new query simply
- * replaced the previous one and it was gone — testing participants wanted to
- * refer back to what they had just been looking at while reading the new
- * results. This row keeps that screen reachable in one click without letting it
- * compete with the current answer for space.
- */
+/** Collapsed previous screen — one-click expand without competing with the current answer. */
 
 /** "easyJet · London → Barcelona · £32.18" — enough to recognise the screen. */
 const summarise = (message: ChatMessage): string | null => {
   const top = message.flights?.[0];
   if (!top) {
-    // A screen with no flights (too broad, off-topic, unknown city) still has
-    // its answer sentence, which is the only thing there is to recognise it by.
+    // No-flight screens: fall back to the answer sentence for recognition.
     const text = message.text?.trim();
     return text ? text : null;
   }

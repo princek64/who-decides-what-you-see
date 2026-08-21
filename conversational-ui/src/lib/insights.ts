@@ -2,7 +2,7 @@ import type { Flight } from '../hooks/useFlightFilter';
 import { formatFlightDate } from './utils';
 import { cheapestPair, splitLegs } from './returnGroups';
 
-// Compact "1h 55m" from raw minutes (falls back to the CSV's formatted string).
+// Compact "1h 55m" from raw minutes (falls back to CSV formatted string).
 const fmtMins = (mins: number): string => {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
@@ -12,19 +12,8 @@ const fmtMins = (mins: number): string => {
 const money = (n: number): string => `£${n.toFixed(2)}`;
 
 /**
- * The cheapest flight in a set, chosen by PRICE and nothing else.
- *
- * This exists because the comparison sentence used to pick its two flights with
- * `results.find(...)`, i.e. "whichever direct/connecting flight the CURRENT SORT
- * put first". Under the default cheapest sort that happens to be the cheapest;
- * after the user clicks "Sort them by fastest" it is the FASTEST — so the same
- * Rome/3-August query reported "cheapest direct £22.33 / cheapest stop £21.32"
- * on one turn and "£32.91 / £71.68" on the next, and neither of the second
- * pair matched the £21.32 the stats panel showed. The candidate set was
- * identical throughout; only the pick was sort-dependent.
- *
- * Ties are broken by duration then flight_id so the choice is fully
- * deterministic even when two flights share a price.
+ * Cheapest by price only (not current sort). Ties: duration, then flight_id.
+ * Prevents "cheapest" labels flipping after the user sorts by fastest.
  */
 export const cheapestBy = (pool: Flight[]): Flight | null => {
   let best: Flight | null = null;
@@ -43,20 +32,9 @@ export const cheapestBy = (pool: Flight[]): Flight | null => {
   return best;
 };
 
-/**
- * Direct-vs-connecting tradeoff + light recommendation.
- *
- * Shape (scannable for chat):
- * 1. Bold verdict
- * 2. One short "why" sentence
- * 3. Two option bullets with bold prices
- *
- * Numbers still come from the SAME `results` array the cards/table render from.
- */
+/** Direct-vs-connecting tradeoff + light recommendation (verdict, why, bullets). */
 export const buildComparisonSentence = (results: Flight[], destLabel: string): string | null => {
-  // A one-way "to Rome" compare must use outbound legs only. When a prior
-  // round-trip flag leaked into the search, the cheapest "direct to Rome" was
-  // sometimes a Rome→London return fare.
+  // One-way compare must use outbound only (prior round-trip flag can leak return fares).
   const legs = splitLegs(results);
   const pool =
     legs.outbound.length > 0
@@ -94,8 +72,7 @@ export const buildComparisonSentence = (results: Flight[], destLabel: string): s
     tradeoff = `The two are within **${money(Math.abs(priceGap))}** and ${fmtMins(Math.abs(timeGap))} of each other.`;
   }
 
-  // Light recommendation: reward direct when the time saved is worth a modest
-  // premium; favour the stop when it saves real money for little extra time.
+  // Prefer direct when time saved is worth a modest premium; else the stop.
   let rec: string;
   if (priceGap <= 0 && timeGap >= 0) {
     rec = "**I'd take the direct** — it wins on both price and time.";
@@ -107,7 +84,6 @@ export const buildComparisonSentence = (results: Flight[], destLabel: string): s
     rec = '**Either works** — pick the direct for speed, or the stop to save money.';
   }
 
-  // Bullets share one blank-line section so ChatBubble renders them as a list.
   return [
     rec,
     tradeoff,
@@ -118,10 +94,7 @@ export const buildComparisonSentence = (results: Flight[], destLabel: string): s
   ].join('\n\n');
 };
 
-/**
- * "Cheapest day/weekend is X" insight — verdict first, then the key facts as
- * short bullets (or one line for a one-way day).
- */
+/** "Cheapest day/weekend is X" — verdict first, then key facts. */
 export const buildCheapestWhenSentence = (
   results: Flight[],
   destLabel: string,
@@ -129,7 +102,7 @@ export const buildCheapestWhenSentence = (
 ): string | null => {
   const isWeekendDay = (date: string) => {
     const day = new Date(`${date}T00:00:00`).getDay();
-    return day === 5 || day === 6 || day === 0; // Fri, Sat, Sun — match filter
+    return day === 5 || day === 6 || day === 0; // Fri–Sun — match filter
   };
   const pool = weekendOnly ? results.filter((f) => isWeekendDay(f.date)) : results;
   const dest = destLabel ? ` to ${destLabel}` : '';

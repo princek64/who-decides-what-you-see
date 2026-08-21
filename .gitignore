@@ -3,7 +3,7 @@
 .env.*
 !.env.example
 
-# --- Claude Code / agent config ---
+# --- Local editor / tooling ---
 .claude/
 CLAUDE.md
 CLAUDE.local.md

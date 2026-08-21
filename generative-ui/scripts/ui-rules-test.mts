@@ -1,7 +1,6 @@
 /**
- * Deterministic UI-rule checks (no Groq): Task 6 refine-chip exclusion on the
- * comparison template, and the comparison delta / cheapest-weekend-day helpers.
- * Run from generative-ui/:  npx tsx scripts/ui-rules-test.mts
+ * Offline UI rules: comparison refine chips + delta / cheapest-weekend-day helpers.
+ * Run: npx tsx scripts/ui-rules-test.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';

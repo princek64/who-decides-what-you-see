@@ -1,7 +1,6 @@
 /**
- * Layout-selection hit-rate test: 3 phrasings per model-choosable layout,
- * scored as HIT (primary), ALT (predefined acceptable alternate) or MISS.
- * Run from generative-ui/:  npx tsx scripts/layout-test.mts
+ * Layout hit-rate: 3 phrasings each, scored HIT / ALT / MISS.
+ * Run: npx tsx scripts/layout-test.mts
  */
 import fs from 'node:fs';
 import path from 'node:path';
