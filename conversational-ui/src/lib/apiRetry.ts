@@ -1,1 +1,1 @@
-export * from '@shared/apiRetry';
+export * from '../../../shared/apiRetry';
