@@ -13,7 +13,7 @@ All three search London → Europe on synthetic flights (1 Jul – 31 Dec 2026) 
 | Folder | What it is | LLM |
 |---|---|---|
 | `data/` | Shared flight CSV | — |
-| `shared/` | Cross-app constants (Groq model, retries, airport map) | — |
+| `shared/` | Cross-app code: Groq model, API retry, airport map | — |
 | [`dashboard-ui/`](dashboard-ui) | Filter-and-sort dashboard | none |
 | [`conversational-ui/`](conversational-ui) | Chat, fixed layout | Groq (see `shared/groq.ts`) |
 | [`generative-ui/`](generative-ui) | Chat, layout chosen per query | Groq (see `shared/groq.ts`) |
