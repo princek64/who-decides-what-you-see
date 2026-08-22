@@ -43,7 +43,10 @@ export const GenResponse: React.FC<GenResponseProps> = ({
   // Round-trip list layouts interleave legs — group/label unless itinerary has a pair.
   const isRoundTrip = isTwoWayResult(intent) && flights.length > 0;
   const hasLabelledPair = layout === 'itinerary' && Boolean(message.itinerary);
-  if (isRoundTrip && !LEG_SAFE_LAYOUTS.has(layout) && !hasLabelledPair) {
+  if (
+    layout === 'return_grouped' ||
+    (isRoundTrip && !LEG_SAFE_LAYOUTS.has(layout) && !hasLabelledPair)
+  ) {
     return (
       <ReturnGroupedView flights={flights} intent={intent} onSelectFlight={onSelectFlight} />
     );

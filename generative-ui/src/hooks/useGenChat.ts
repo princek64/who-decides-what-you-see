@@ -27,6 +27,10 @@ import type { GenIntent } from '../lib/intentBackstops';
 import { buildItinerary, nearbyAlternatives } from '../lib/layoutData';
 import { placeScreen } from '../lib/screenHistory';
 import type { ItineraryPair, AlertAlternatives } from '../lib/layoutData';
+import { isTwoWayResult } from '../lib/returnGroups';
+
+/** Layouts that don't show a flat flight list (no interleaved round-trip confusion). */
+const LEG_SAFE_LAYOUTS = new Set(['calendar', 'destinations', 'map', 'trend', 'alert']);
 
 export interface ChatMessage {
   id: string;
@@ -273,6 +277,16 @@ export const useGenChat = () => {
     if (layout !== 'itinerary' && filteredResults.length === 0) {
       layout = 'alert';
       alternatives = nearbyAlternatives(flights, intent, medianCo2);
+    }
+
+    // Match GenResponse: two-way list layouts → labelled legs (log what actually renders).
+    if (
+      isTwoWayResult(intent) &&
+      filteredResults.length > 0 &&
+      !LEG_SAFE_LAYOUTS.has(layout) &&
+      !(layout === 'itinerary' && itinerary)
+    ) {
+      layout = 'return_grouped';
     }
 
     logAiResponse({ ...intent, layout_rendered: layout });

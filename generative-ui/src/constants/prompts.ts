@@ -33,7 +33,7 @@ export const MODEL_LAYOUTS = [
 ] as const;
 
 export type ModelLayout = (typeof MODEL_LAYOUTS)[number];
-export type Layout = ModelLayout | 'alert';
+export type Layout = ModelLayout | 'alert' | 'return_grouped';
 
 // Inject today's date into the prompt at call time.
 export const buildSystemPrompt = (): string => {
@@ -84,11 +84,11 @@ CRITICAL RULES:
    - "destinations": the user has a budget or constraint but NO destination ("where can I go for £150").
    - "map": explicitly geographic questions ("where can I fly from London", "show me on a map", "which cities can I reach").
    - "itinerary": round trips and trip planning — including ANY mention of both going and coming back ("plan a weekend trip to Rome", "out Friday back Sunday", "go on 10 July and come back on 14 July").
-14. WEEKEND TRIPS: if the user asks for a "weekend trip" / "weekend away" / "long weekend" (a short round trip over a weekend), also set "weekend": true. This tells the planner to depart Friday/Saturday and return Sunday/Monday. Still return the full search window in "date_from"/"date_to" (e.g. the month) so the cheapest weekend inside it can be found.
    - "budget": what a stated budget buys with emphasis on spending/money left over ("what can I get for £150", "how far does £80 go").
    - "multileg": questions focused on layovers, stopovers or connections ("how do the layovers work", "show me the connection details").
    - "ranked": vague quality requests ("find me something good", "best options", "top 5").
    - "grid": any other filtered search with constraints (destination + filters). WHEN UNSURE, USE "grid".
+14. WEEKEND TRIPS: if the user asks for a "weekend trip" / "weekend away" / "long weekend" (a short round trip over a weekend), also set "weekend": true. This tells the planner to depart Friday/Saturday and return Sunday/Monday. Still return the full search window in "date_from"/"date_to" (e.g. the month) so the cheapest weekend inside it can be found.
 
 Allowed JSON structure:
 {
