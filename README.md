@@ -13,6 +13,7 @@ All three search London → Europe on synthetic flights (1 Jul – 31 Dec 2026) 
 | Folder | What it is | LLM |
 |---|---|---|
 | `data/` | Shared flight CSV | — |
+| `shared/` | Cross-app constants (Groq model, retries, airport map) | — |
 | [`dashboard-ui/`](dashboard-ui) | Filter-and-sort dashboard | none |
 | [`conversational-ui/`](conversational-ui) | Chat, fixed layout | Groq (see `shared/groq.ts`) |
 | [`generative-ui/`](generative-ui) | Chat, layout chosen per query | Groq (see `shared/groq.ts`) |
@@ -20,6 +21,10 @@ All three search London → Europe on synthetic flights (1 Jul – 31 Dec 2026) 
 Each app is its own Vite project. On build, `prebuild` copies the CSV from `data/` into that app’s `public/`. More detail lives in each app’s `README.md` / `DESIGN.md`.
 
 UI look is shared (Geist, dark).
+
+### Changing the Groq model
+
+Edit **one file**: [`shared/groq.ts`](shared/groq.ts) (`GROQ_MODEL`). Both chat apps and the live Groq scripts pick it up from there. After a swap, smoke-test with `npx tsx scripts/pipeline-test.mts` in each chat app.
 
 ## Dataset
 
