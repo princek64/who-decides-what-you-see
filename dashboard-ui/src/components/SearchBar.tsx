@@ -335,7 +335,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
       {/* 1. Origin Airport Dropdown */}
       <div className="flex flex-col gap-1.5 text-left flex-[1.4_1_180px] max-[480px]:basis-full">
-        <label className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider">Origin</label>
+        <label className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Origin</label>
         <Select value={originCode} onValueChange={setOriginCode}>
           <SelectTrigger size="lg" className="w-full bg-transparent border-input font-medium text-foreground h-10 rounded-md">
             <SelectValue placeholder="Origin" />
@@ -352,25 +352,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         </Select>
       </div>
 
-      {/* Swap Origin/Destination — Google Flights / Skyscanner style: a small
-          circular button sitting ON the seam between the two fields rather
-          than occupying its own layout slot. This anchor has zero width, so
-          with equal gaps on both sides (the form's `gap-4`) it lands exactly
-          on the border between Origin and Destination; the button is then
-          centered on that point and overlaps both fields evenly. `mx-4`
-          adds the same 16px breathing room on each side as the gap-4
-          between every other field pair (e.g. Destination → Dates). Kept
-          small (w-4/h-4) and borderless so it reads as a lightweight icon
-          affordance rather than a third field competing for space. Hidden
-          below 480px, where the fields stack and there's no shared border to
-          sit on (mirrors the fields' own `max-[480px]:basis-full`). */}
+      {/* Swap Origin/Destination */}
       <div className="relative w-0 h-10 shrink-0 mx-4 max-[480px]:hidden" aria-hidden="false">
         <button
           type="button"
           onClick={handleSwap}
           aria-label="Swap origin and destination"
           title="Swap origin and destination"
-          className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-4 h-4 flex items-center justify-center rounded-full bg-card text-foreground shadow-card hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 w-7 h-7 flex items-center justify-center rounded-full bg-card border border-input text-foreground shadow-card hover:bg-secondary transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         >
           <ArrowLeftRight className="w-3.5 h-3.5" />
         </button>
@@ -378,7 +367,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
       {/* 2. Destination City Input with Suggestions */}
       <div className="flex flex-col gap-1.5 text-left relative flex-[2_1_220px] max-[480px]:basis-full" ref={suggestionRef}>
-        <label className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider">Destination City</label>
+        <label className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Destination City</label>
         <div className="relative">
           <MapPin className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
           <Input
@@ -396,9 +385,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
         {/* Suggestion list overlay */}
         {showSuggestions && suggestions.length > 0 && (
-          <div className="absolute top-16 left-0 right-0 bg-card border border-border rounded-md shadow-modal max-h-56 overflow-y-auto overscroll-contain z-40 py-1">
+          <div className="absolute top-16 left-0 right-0 bg-card border border-input rounded-md shadow-modal max-h-56 overflow-y-auto overscroll-contain z-40 py-1">
             {exploring && (
-              <div className="px-3 pt-1.5 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              <div className="px-3 pt-1.5 pb-1 text-xs font-mono uppercase tracking-wider text-muted-foreground">
                 Explore
               </div>
             )}
@@ -412,7 +401,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               return (
                 <React.Fragment key={city}>
                   {showPopularHeader && (
-                    <div className="px-3 pt-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground border-t border-border mt-1">
+                    <div className="px-3 pt-2 pb-1 text-xs font-mono uppercase tracking-wider text-muted-foreground border-t border-border mt-1">
                       Popular destinations
                     </div>
                   )}
@@ -432,12 +421,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({
                     </span>
                     <span className="flex flex-col min-w-0 flex-1">
                       <span className="text-sm font-medium text-foreground truncate">{city}</span>
-                      {country && <span className="text-[11px] text-muted-foreground leading-tight">{country}</span>}
+                      {country && <span className="text-xs text-muted-foreground leading-tight">{country}</span>}
                     </span>
                     {codes.length > 0 && (
                       <span className="flex gap-1 shrink-0">
                         {codes.map((code) => (
-                          <span key={code} className="text-[10px] font-mono text-muted-foreground bg-secondary border border-border rounded px-1 py-0.5">
+                          <span key={code} className="text-xs font-mono text-muted-foreground bg-secondary border border-border rounded px-1 py-0.5">
                             {code}
                           </span>
                         ))}
@@ -453,7 +442,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
 
       {/* 3. Travel Date Picker with per-day fares (H2 2026 Only) */}
       <div className="flex flex-col gap-1.5 text-left flex-[2_1_240px] max-[480px]:basis-full">
-        <label className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider">
+        <label className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
           {direction === 'return' ? 'Dates' : 'Date'}
         </label>
         {direction === 'return' ? (

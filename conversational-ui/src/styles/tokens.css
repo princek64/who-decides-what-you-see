@@ -30,10 +30,24 @@
   --input: #646464;
 
   /* Accents — colour only carries meaning */
-  --accent-blue: #0072f5;   /* links, focus, primary actions */
+  --accent-blue: #0072f5;   /* focus, primary actions */
   --accent-green: #00c853;  /* low CO2, success */
   --accent-amber: #f5a623;  /* warnings, filling fast */
   --accent-red: #ff4d4f;    /* errors, delays */
+
+  /* Link TEXT uses a brighter step of brand blue (#4c9dff, ~7:1 WCAG AA) */
+  --link: #4c9dff;
+  --link-deep: #7cb7ff;
+  --link-soft: rgba(0, 114, 245, 0.14);
+  --warning: var(--accent-amber);
+  --warning-deep: #ffbf47;
+  --warning-soft: rgba(245, 166, 35, 0.14);
+  --error: var(--accent-red);
+  --error-deep: #ff7875;
+  --error-soft: rgba(255, 77, 79, 0.14);
+  --success: var(--accent-green);
+  --success-deep: #33d375;
+  --success-soft: rgba(0, 200, 83, 0.14);
 
   /* Legacy terminal-* accent names (used across the chat components) rebased
      onto the single meaningful-colour palette. */
@@ -51,10 +65,10 @@
   --destructive: var(--accent-red);
   --ring: var(--accent-blue);
 
-  /* Neutral chart ramp (monochrome by default) */
+  /* Neutral chart ramp (chart-3 lifted to #8e8e8e for WCAG AA label contrast) */
   --chart-1: #ededed;
   --chart-2: #a1a1a1;
-  --chart-3: #737373;
+  --chart-3: #8e8e8e;
   --chart-4: #404040;
   --chart-5: #262626;
 

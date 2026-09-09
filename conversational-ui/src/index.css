@@ -19,6 +19,18 @@
     --color-accent-green: var(--accent-green);
     --color-accent-amber: var(--accent-amber);
     --color-accent-red: var(--accent-red);
+    --color-link: var(--link);
+    --color-link-deep: var(--link-deep);
+    --color-link-soft: var(--link-soft);
+    --color-warning: var(--warning);
+    --color-warning-soft: var(--warning-soft);
+    --color-warning-deep: var(--warning-deep);
+    --color-error: var(--error);
+    --color-error-soft: var(--error-soft);
+    --color-error-deep: var(--error-deep);
+    --color-success: var(--success);
+    --color-success-soft: var(--success-soft);
+    --color-success-deep: var(--success-deep);
     --color-terminal-red: var(--terminal-red);
     --color-terminal-yellow: var(--terminal-yellow);
     --color-terminal-green: var(--terminal-green);
@@ -146,8 +158,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .searching-fade {
-    animation: none;
+  .searching-fade,
+  .animate-flight-takeoff,
+  .animate-caret-blink,
+  .animate-pulse,
+  .animate-spin {
+    animation: none !important;
     background-position: 0% 0;
   }
 }

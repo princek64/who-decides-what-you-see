@@ -59,21 +59,11 @@ export const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect, style 
             onSelect(flight);
           }
         }}
-        className={`h-[168px] sm:h-[188px] w-full p-3 sm:p-4 flex flex-col justify-between rounded-lg hover:border-white/20 hover:shadow-card-md transition-all cursor-pointer select-none bg-card border border-border shadow-card outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-          isCancelled ? 'opacity-65 border-dashed bg-secondary/40' : ''
+        className={`h-[168px] sm:h-[188px] w-full p-3 sm:p-4 flex flex-col justify-between rounded-lg hover:border-input hover:shadow-card-md transition-all cursor-pointer select-none bg-card border border-input shadow-card outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+          isCancelled ? 'border-dashed border-error/50 bg-secondary/80' : ''
         }`}
       >
-        {/* Top Line: Airline details and aircraft. Deliberately carries NO
-            flight-status badge: every flight in this dataset is future-dated and
-            synthetic, so "Delayed" / "On time" / "Scheduled" claimed knowledge
-            the system cannot have. In testing that badge did real damage — one
-            participant avoided a flight she otherwise wanted because it read
-            "Delayed", and two asked how a future flight could have a status at
-            all. Cancellation is still reflected, but as card styling (dimmed,
-            dashed border, struck-through figures) rather than a status claim.
-            On mobile the metadata (tier, flight number, aircraft) is dropped so
-            the airline name and date stay on one line inside the fixed card
-            height. */}
+        {/* Top Line: Airline details and aircraft. */}
         <div className="flex justify-between items-center gap-2 text-xs text-muted-foreground min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             {/* Black line-art on transparent: `invert` renders it white so it
@@ -82,15 +72,15 @@ export const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect, style 
             <span className="font-medium text-foreground text-[13px] sm:text-sm truncate">{flight.airline_name}</span>
             <span className="hidden sm:contents">
               {getAirlineTierBadge()}
-              <span className="text-muted-foreground/70">|</span>
+              <span className="text-muted-foreground">|</span>
               <span className="font-mono">{flight.flight_number}</span>
-              <span className="text-muted-foreground/70">•</span>
+              <span className="text-muted-foreground">•</span>
               <span className="font-mono">{flight.aircraft_type}</span>
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <span className="font-mono tabular-nums font-medium text-muted-foreground text-[11px] sm:text-xs">{formattedDate}</span>
-            <Badge className="hidden sm:inline-flex bg-secondary text-muted-foreground border-transparent hover:bg-secondary text-[10px] font-medium">
+            <span className="font-mono tabular-nums font-medium text-muted-foreground text-xs sm:text-xs">{formattedDate}</span>
+            <Badge className="hidden sm:inline-flex bg-secondary text-muted-foreground border-transparent hover:bg-secondary text-xs font-medium">
               {flight.direction === 'outbound' ? 'Outbound' : 'Return'}
             </Badge>
           </div>
@@ -106,17 +96,17 @@ export const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect, style 
                 {flight.departure_time}
               </div>
               <div className="text-xs sm:text-sm font-mono font-medium text-foreground">{flight.origin_code}</div>
-              <div className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[74px] sm:max-w-[120px]">{getCityName(flight.origin_code)}</div>
+              <div className="text-xs text-muted-foreground truncate max-w-[74px] sm:max-w-[120px]">{getCityName(flight.origin_code)}</div>
             </div>
 
             {/* Travel Line */}
             <div className="flex-1 flex flex-col items-center justify-center min-w-[44px] sm:min-w-[60px]">
-              <span className="text-[10px] sm:text-xs text-muted-foreground font-mono tabular-nums font-medium">{flight.duration_formatted}</span>
+              <span className="text-xs text-muted-foreground font-mono tabular-nums font-medium">{flight.duration_formatted}</span>
               <div className="w-full flex items-center justify-center relative my-1">
                 <div className="h-[1.5px] bg-border w-full"></div>
                 <Plane className={`w-3.5 h-3.5 text-muted-foreground absolute bg-card px-0.5 ${isCancelled ? 'text-border' : ''}`} />
               </div>
-              <span className="text-[10px] sm:text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {flight.stops === 0 ? 'Direct' : `${flight.stops} Stop`}
               </span>
             </div>
@@ -127,16 +117,13 @@ export const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect, style 
                 {flight.arrival_time}
               </div>
               <div className="text-xs sm:text-sm font-mono font-medium text-foreground">{flight.dest_code}</div>
-              <div className="text-[10px] sm:text-xs text-muted-foreground truncate max-w-[74px] sm:max-w-[120px]">{getCityName(flight.dest_code)}</div>
+              <div className="text-xs text-muted-foreground truncate max-w-[74px] sm:max-w-[120px]">{getCityName(flight.dest_code)}</div>
             </div>
           </div>
 
-          {/* Price display — fixed width + tabular figures so the fares line up
-              vertically across every card in the list. The width is narrower on
-              mobile, where a 4-figure fare would otherwise crush the arrival
-              block and overlap it. */}
+          {/* Price display */}
           <div className="w-[86px] sm:w-[128px] shrink-0 flex flex-col justify-center items-end pl-2 sm:pl-4 border-l border-border h-12">
-            <div className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wider font-mono">Price</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider font-mono">Price</div>
             <div className={`text-base sm:text-2xl font-mono font-semibold tracking-tight text-foreground tabular-nums ${isCancelled ? 'line-through text-muted-foreground' : ''}`}>
               £{flight.price_gbp.toFixed(2)}
             </div>

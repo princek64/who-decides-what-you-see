@@ -173,13 +173,19 @@ export const ChatView: React.FC = () => {
   );
 
   const disclaimer = (
-    <p className="text-center text-[11px] text-muted-foreground select-none">
+    <p className="text-center text-xs text-muted-foreground select-none">
       Flight Explorer can make mistakes — check flight details before booking.
     </p>
   );
 
   return (
     <div className="flex flex-col h-screen bg-background font-sans text-foreground">
+      <a
+        href="#main-gen"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-md font-medium text-xs"
+      >
+        Skip to main content
+      </a>
 
       {/* Header */}
       <header className="sticky top-0 z-10 flex items-center justify-between px-6 h-14 bg-background border-b border-border">
@@ -210,7 +216,7 @@ export const ChatView: React.FC = () => {
       ) : messages.length === 0 ? (
 
         /* Empty state */
-        <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full animate-fade-in">
+        <main id="main-gen" className="flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full animate-fade-in">
           <div className="text-center space-y-2 mb-8 w-full">
             <h2 className="text-3xl md:text-4xl font-heading font-semibold text-foreground tracking-tight">Where do you want to go?</h2>
             <p className="text-sm text-muted-foreground">Describe a trip and the screen builds itself around the answer.</p>
@@ -221,11 +227,11 @@ export const ChatView: React.FC = () => {
 
             <div className="mt-6">{disclaimer}</div>
           </div>
-        </div>
+        </main>
       ) : (
 
         /* Active: one generated screen */
-        <div className="flex-1 flex flex-col min-h-0">
+        <main id="main-gen" className="flex-1 flex flex-col min-h-0">
           <div ref={canvasRef} className="relative flex-1 min-h-0 overflow-y-auto">
 
             {/* Error banner above the live screen (don't replace it) */}
@@ -242,7 +248,7 @@ export const ChatView: React.FC = () => {
                           dismissError();
                           sendMessage(lastUserText);
                         }}
-                        className="text-[11px] font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1 px-3 transition-colors"
+                        className="text-xs font-medium text-foreground border border-border hover:border-white/20 rounded-full py-1 px-3 transition-colors"
                       >
                         Try again
                       </button>
@@ -273,7 +279,7 @@ export const ChatView: React.FC = () => {
             {/* Collapsed prior screens (read-only when expanded) */}
             {historyScreens.length > 0 && (
               <div className="mx-auto w-full max-w-6xl px-4 md:px-8 pt-6 space-y-2">
-                <div className="text-[11px] font-mono uppercase tracking-[0.15em] text-muted-foreground">
+                <div className="text-xs font-mono uppercase tracking-[0.15em] text-muted-foreground">
                   Earlier in this search
                 </div>
                 {historyScreens.map((past) => (
@@ -333,7 +339,7 @@ export const ChatView: React.FC = () => {
                   {lastUserText && (
                     <div className="mt-4 inline-flex items-center gap-2 bg-muted border border-border rounded-full px-4 py-1.5 max-w-full min-w-0">
                       <Search className="w-3 h-3 text-muted-foreground shrink-0" />
-                      <span className="text-[11px] font-mono text-muted-foreground truncate">{lastUserText}</span>
+                      <span className="text-xs font-mono text-muted-foreground truncate">{lastUserText}</span>
                     </div>
                   )}
                   <div className="mt-4">
@@ -351,7 +357,7 @@ export const ChatView: React.FC = () => {
               {disclaimer}
             </div>
           </div>
-        </div>
+        </main>
       )}
 
       {/* Flight detail modal */}
