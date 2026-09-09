@@ -158,7 +158,7 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
         )}
         <div className="grid grid-cols-7 mb-1">
           {WEEKDAYS.map((wd, i) => (
-            <div key={i} className="text-center text-[10px] font-mono text-muted-foreground py-1">
+            <div key={i} className="text-center text-xs font-mono text-muted-foreground py-1">
               {wd}
             </div>
           ))}
@@ -186,22 +186,18 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
                     ? 'high'
                     : 'mid';
 
-            // Fare shading carries meaning, so it carries colour (Google Flights'
-            // green–grey–red ramp): green = cheaper than most days, bare canvas =
-            // typical, red = pricier. The value ramp alone (all-grey fills) was
-            // too faint to read at a glance on the dark canvas.
             const cellClass = isStart || isEnd
               ? 'bg-primary text-primary-foreground'
               : !inRange
-                ? 'text-muted-foreground/30 cursor-default'
+                ? 'text-muted-foreground/60 cursor-default'
                 : inSelectedSpan
                   ? 'bg-secondary text-foreground hover:bg-secondary'
                   : !pricesEnabled
                     ? 'hover:bg-white/10 text-foreground'
                     : level === 'low'
-                    ? 'bg-accent-green/15 hover:bg-accent-green/25 text-foreground ring-1 ring-inset ring-accent-green/30'
+                    ? 'bg-accent-green/15 hover:bg-accent-green/25 text-foreground ring-1 ring-inset ring-accent-green/40'
                     : level === 'high'
-                      ? 'bg-accent-red/[0.07] hover:bg-accent-red/15 text-foreground/80'
+                      ? 'bg-accent-red/[0.1] hover:bg-accent-red/20 text-foreground'
                       : 'bg-white/[0.06] hover:bg-white/12 text-foreground';
 
             return (
@@ -209,6 +205,7 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
                 key={key}
                 type="button"
                 disabled={!inRange}
+                aria-disabled={!inRange || undefined}
                 onClick={() => handlePick(key)}
                 onMouseEnter={() => setHoverKey(key)}
                 className={`h-11 rounded-md flex flex-col items-center justify-center gap-0 text-xs transition-colors relative outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${cellClass}`}
@@ -216,16 +213,16 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
                 <span className={`leading-none ${level === 'low' ? 'font-semibold' : 'font-medium'}`}>{day}</span>
                 {inRange && price !== undefined && (
                   <span
-                    className={`leading-none mt-0.5 text-[9px] font-mono tabular-nums ${
+                    className={`leading-none mt-0.5 text-[10px] font-mono tabular-nums ${
                       isStart || isEnd
-                        ? 'text-primary-foreground/70'
+                        ? 'text-primary-foreground/90 font-medium'
                         : inSelectedSpan
-                          ? 'text-foreground/70'
+                          ? 'text-foreground/90 font-medium'
                           : level === 'low'
                             ? 'text-accent-green font-bold'
                             : level === 'high'
-                              ? 'text-accent-red/80 font-medium'
-                              : 'text-foreground/75 font-medium'
+                              ? 'text-accent-red font-semibold'
+                              : 'text-foreground/85 font-medium'
                     }`}
                   >
                     £{Math.round(price)}
@@ -244,7 +241,7 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="w-full bg-card border border-input h-10 px-3 rounded-md text-sm font-medium text-foreground flex items-center gap-2 hover:border-white/40 focus:outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring transition-colors"
+          className="w-full bg-card border border-input h-10 px-3 rounded-md text-sm font-medium text-foreground flex items-center gap-2 hover:border-input focus:outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring transition-colors"
         >
           <CalendarIcon className="w-4 h-4 text-muted-foreground shrink-0" />
           {isRange ? (
@@ -278,7 +275,7 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
             <ChevronLeft className="w-4 h-4" />
           </button>
           {isRange ? (
-            <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
               {pickingEnd ? 'Select return date' : 'Select departure date'}
             </span>
           ) : (
@@ -310,11 +307,11 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
         {/* Prices are route-specific: without a destination, prompt for one
             instead of showing a misleading fare shading legend. */}
         {!pricesEnabled ? (
-          <div className="border-t border-border mt-3 pt-2.5 text-[11px] text-muted-foreground text-center">
+          <div className="border-t border-border mt-3 pt-2.5 text-xs text-muted-foreground text-center">
             Select a destination to see prices for each day.
           </div>
         ) : (
-          <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-1 border-t border-border mt-3 pt-2.5 text-[10px] text-muted-foreground">
+          <div className="flex items-center justify-center flex-wrap gap-x-3 gap-y-1 border-t border-border mt-3 pt-2.5 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-accent-green/25 ring-1 ring-inset ring-accent-green/50"></span>
               <span className="text-accent-green font-medium">Cheaper</span>
@@ -325,7 +322,7 @@ export const PriceCalendar: React.FC<PriceCalendarProps> = ({
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-accent-red/20 ring-1 ring-inset ring-accent-red/40"></span>
-              <span className="text-accent-red/90 font-medium">Pricier</span>
+              <span className="text-accent-red font-medium">Pricier</span>
             </span>
             {isRange && (
               <span className="flex items-center gap-1.5">

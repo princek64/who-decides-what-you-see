@@ -628,7 +628,7 @@ export const useChat = () => {
       return;
     }
 
-    if (isPickBestQuery(text)) {
+    if (isPickBestQuery(text) && !destinationFromText(text) && !dateFromText(text)) {
       setIsLoading(true);
       const loadingSince = performance.now();
       try {

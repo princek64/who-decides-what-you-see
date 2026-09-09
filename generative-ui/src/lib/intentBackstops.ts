@@ -131,10 +131,39 @@ export const flexibleWindowFromText = (
     !three &&
     (/\b(?:in|over|for|during|within)\s+the\s+next\s+months?\b/i.exec(text) ||
       /\bnext\s+months?\b/i.exec(text));
-  if (!three && !one) return null;
+  const weeks =
+    !three &&
+    !one &&
+    (/\b(?:in|over|for|during|within)\s+the\s+next\s+(?:few|\d+)\s+weeks?\b/i.exec(text) ||
+      /\bnext\s+(?:few|\d+)\s+weeks?\b/i.exec(text));
+
+  const monthYear =
+    !three &&
+    !one &&
+    !weeks &&
+    /\b(?:in|during|for)\s+(january|february|march|april|may|june|july|august|september|october|november|december)(?:\s+(\d{4}))?\b/i.exec(text);
+
+  if (monthYear) {
+    const monthName = monthYear[1].toLowerCase();
+    const monthsMap: Record<string, number> = {
+      january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
+      july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+    };
+    const m = monthsMap[monthName];
+    const year = monthYear[2] ? Number(monthYear[2]) : 2026;
+    if (m) {
+      const from = `${year}-${pad(m)}-01`;
+      const lastDay = new Date(year, m, 0).getDate();
+      const to = `${year}-${pad(m)}-${pad(lastDay)}`;
+      return { date_from: from, date_to: to };
+    }
+  }
+
+  if (!three && !one && !weeks) return null;
   const from = getSearchAnchor();
   const end = new Date(`${from}T00:00:00`);
   if (three) end.setMonth(end.getMonth() + 3);
+  else if (weeks) end.setDate(end.getDate() + 28);
   else end.setDate(end.getDate() + 30);
   let to = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}`;
   if (to > DATA_MAX) to = DATA_MAX;
@@ -235,6 +264,20 @@ export const applyIntentBackstops = (intent: GenIntent, text: string): GenIntent
     next.layout = 'comparison';
   } else if (isDirectOnlyQuery(text)) {
     next.stops = 0;
+  }
+
+  if (/\bmap\b/i.test(text)) {
+    next.layout = 'map';
+  } else if (/\btrend\b|price picture|prices over time|cheapest time|when is it cheapest/i.test(text)) {
+    next.layout = 'trend';
+  } else if (/\bbudget\b|how much would I have left|left over/i.test(text)) {
+    next.layout = 'budget';
+  } else if (/\branked\b|something good|best options/i.test(text)) {
+    next.layout = 'ranked';
+  } else if (/\bmultileg\b|layover|layovers|connection/i.test(text)) {
+    next.layout = 'multileg';
+  } else if (/\bitinerary\b|plan a weekend trip|plan a trip/i.test(text)) {
+    next.layout = 'itinerary';
   }
 
   if (!next.sort_by) next.sort_by = 'cheapest';
@@ -560,6 +603,33 @@ export const tryLocalIntent = (text: string, hasPrevious = false): GenIntent | n
   const dest = destinationFromText(t);
   const day = dateFromText(t);
   const window = flexibleWindowFromText(t);
+
+  if (/\bmap\b|\btrend\b|\bbudget\b|\branked\b|\bmultileg\b|\blayover\b|\blayovers\b|\bconnection\b|\bplan\b|\bitinerary\b/i.test(t)) {
+    const layout = /\bmap\b/i.test(t)
+      ? 'map'
+      : /\btrend\b|price picture|prices over time|cheapest time|when is it cheapest/i.test(t)
+        ? 'trend'
+        : /\bbudget\b|how much would I have left|left over/i.test(t)
+          ? 'budget'
+          : /\branked\b|something good|best options/i.test(t)
+            ? 'ranked'
+            : /\bmultileg\b|layover|layovers|connection/i.test(t)
+              ? 'multileg'
+              : 'itinerary';
+    const intent: GenIntent = {
+      sort_by: 'cheapest',
+      cabin_class: 'Economy',
+      layout,
+      direction: 'outbound',
+    };
+    if (dest) intent.dest_city = dest;
+    if (day) intent.date = day;
+    if (window && !day) {
+      intent.date_from = window.date_from;
+      intent.date_to = window.date_to;
+    }
+    return applyIntentBackstops(intent, t);
+  }
   if (dest && (day || window)) {
     const intent: GenIntent = {
       dest_city: dest,

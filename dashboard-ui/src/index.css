@@ -153,8 +153,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .animate-search-progress {
-    animation: none;
+  .animate-search-progress,
+  .animate-flight-takeoff,
+  .animate-pulse,
+  .animate-spin {
+    animation: none !important;
     transform: translateX(0);
     width: 100%;
     opacity: 0.5;

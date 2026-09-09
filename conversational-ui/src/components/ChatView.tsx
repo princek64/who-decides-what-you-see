@@ -224,13 +224,19 @@ export const ChatView: React.FC = () => {
   );
 
   const disclaimer = (
-    <p className="text-center text-[11px] text-muted-foreground select-none">
+    <p className="text-center text-xs text-muted-foreground select-none">
       Flight Assistant can make mistakes — check flight details before booking.
     </p>
   );
 
   return (
     <div className="flex flex-col h-screen bg-background font-sans text-foreground">
+      <a
+        href="#main-chat"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-md font-medium text-xs"
+      >
+        Skip to main content
+      </a>
 
       {/* Header */}
       <header className="sticky top-0 z-10 flex items-center justify-between px-6 h-14 bg-background border-b border-border">
@@ -258,7 +264,7 @@ export const ChatView: React.FC = () => {
           <div className="mt-4 text-sm font-mono text-muted-foreground animate-pulse">launching flight assistant…</div>
         </div>
       ) : (
-        <div className={messages.length === 0
+        <main id="main-chat" className={messages.length === 0
           ? "flex-1 flex flex-col items-center justify-center p-6 max-w-2xl mx-auto w-full animate-fade-in"
           : "flex-1 flex flex-col min-h-0"
         }>
@@ -347,7 +353,7 @@ export const ChatView: React.FC = () => {
             </div>
           </div>
 
-        </div>
+        </main>
       )}
 
     </div>

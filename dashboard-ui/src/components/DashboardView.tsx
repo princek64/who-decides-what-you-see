@@ -394,6 +394,13 @@ export const DashboardView: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:shadow-md font-medium text-xs"
+      >
+        Skip to main content
+      </a>
+
       {/* 1. Sticky Header */}
       <header className="sticky top-0 z-40 bg-background border-b border-border h-16 px-4 md:px-8 flex justify-between items-center select-none">
         <button
@@ -436,7 +443,7 @@ export const DashboardView: React.FC = () => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-4 md:p-6 gap-6 box-border">
+      <main id="main-content" className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-4 md:p-6 gap-6 box-border">
         {!hasSearched ? (
           /* Pre-search hero: the search card sits ~30% down the viewport (not
              vertically centred), with a tight logo→heading→subtext rhythm above it */
