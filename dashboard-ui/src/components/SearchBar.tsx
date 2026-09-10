@@ -31,15 +31,14 @@ interface SearchBarProps {
 }
 
 // Shown when the destination field is focused while still empty,
-// like Google Flights' suggested destinations. "Anywhere" is first so
-// participants can pick open explore without clearing the field manually.
-const ANYWHERE_OPTION = 'Anywhere';
+// like Google Flights' suggested destinations.
 const POPULAR_DESTINATIONS = ['Barcelona', 'Paris', 'Rome', 'Amsterdam', 'Madrid', 'Lisbon'];
 
-const isAnywhereDestination = (value: string): boolean =>
-  !value.trim() || value.trim().toLowerCase() === ANYWHERE_OPTION.toLowerCase();
+// A blank destination still means open-ended explore — participants clear the
+// field to browse by budget/date rather than picking an "Anywhere" option.
+const isAnywhereDestination = (value: string): boolean => !value.trim();
 
-/** Value submitted to search — Anywhere / blank both mean open explore. */
+/** Value submitted to search — a blank destination means open explore. */
 const resolveDestForSearch = (value: string): string =>
   isAnywhereDestination(value) ? '' : value.trim();
 
@@ -141,15 +140,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   }, [initialPassengers]);
 
   // Rank prefix matches above substring matches (Google Flights behaviour).
-  // Empty field: Anywhere first, then popular cities.
+  // Empty field: popular cities.
   const buildMatches = (value: string): string[] => {
     const q = value.trim().toLowerCase();
-    if (!q || q === ANYWHERE_OPTION.toLowerCase()) {
-      return [ANYWHERE_OPTION, ...POPULAR_DESTINATIONS];
+    if (!q) {
+      return [...POPULAR_DESTINATIONS];
     }
     const starts: string[] = [];
     const contains: string[] = [];
-    if (ANYWHERE_OPTION.toLowerCase().startsWith(q)) starts.push(ANYWHERE_OPTION);
     for (const city of DESTINATION_CITIES) {
       const lower = city.toLowerCase();
       if (lower.startsWith(q)) starts.push(city);
@@ -173,9 +171,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   };
 
   const handleSuggestionClick = (city: string) => {
-    // Anywhere must land as the open-explore path (empty destCity in search
-    // state). Keep the label visible in the field so the choice is obvious.
-    setDestCity(city === ANYWHERE_OPTION ? ANYWHERE_OPTION : city);
+    setDestCity(city);
     setSuggestions([]);
     setShowSuggestions(false);
     setActiveSuggestion(-1);
@@ -386,54 +382,35 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         {/* Suggestion list overlay */}
         {showSuggestions && suggestions.length > 0 && (
           <div className="absolute top-16 left-0 right-0 bg-card border border-input rounded-md shadow-modal max-h-56 overflow-y-auto overscroll-contain z-40 py-1">
-            {exploring && (
-              <div className="px-3 pt-1.5 pb-1 text-xs font-mono uppercase tracking-wider text-muted-foreground">
-                Explore
-              </div>
-            )}
             {suggestions.map((city, idx) => {
-              const isAnywhere = city === ANYWHERE_OPTION;
-              const codes = isAnywhere ? [] : CITY_TO_CODE[city.toLowerCase()] || [];
-              const country = isAnywhere ? 'Any European destination' : getCityCountry(city);
-              // Divider before popular cities when Anywhere is listed first
-              const showPopularHeader =
-                exploring && idx === 1 && suggestions[0] === ANYWHERE_OPTION;
+              const codes = CITY_TO_CODE[city.toLowerCase()] || [];
+              const country = getCityCountry(city);
               return (
-                <React.Fragment key={city}>
-                  {showPopularHeader && (
-                    <div className="px-3 pt-2 pb-1 text-xs font-mono uppercase tracking-wider text-muted-foreground border-t border-border mt-1">
-                      Popular destinations
-                    </div>
+                <div
+                  key={city}
+                  onClick={() => handleSuggestionClick(city)}
+                  onMouseEnter={() => setActiveSuggestion(idx)}
+                  className={`px-3 py-2 flex items-center gap-2.5 cursor-pointer transition-colors ${
+                    idx === activeSuggestion ? 'bg-secondary' : ''
+                  }`}
+                >
+                  <span className="w-7 h-7 rounded-full bg-secondary border border-border flex items-center justify-center shrink-0">
+                    <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                  </span>
+                  <span className="flex flex-col min-w-0 flex-1">
+                    <span className="text-sm font-medium text-foreground truncate">{city}</span>
+                    {country && <span className="text-xs text-muted-foreground leading-tight">{country}</span>}
+                  </span>
+                  {codes.length > 0 && (
+                    <span className="flex gap-1 shrink-0">
+                      {codes.map((code) => (
+                        <span key={code} className="text-xs font-mono text-muted-foreground bg-secondary border border-border rounded px-1 py-0.5">
+                          {code}
+                        </span>
+                      ))}
+                    </span>
                   )}
-                  <div
-                    onClick={() => handleSuggestionClick(city)}
-                    onMouseEnter={() => setActiveSuggestion(idx)}
-                    className={`px-3 py-2 flex items-center gap-2.5 cursor-pointer transition-colors ${
-                      idx === activeSuggestion ? 'bg-secondary' : ''
-                    }`}
-                  >
-                    <span className="w-7 h-7 rounded-full bg-secondary border border-border flex items-center justify-center shrink-0">
-                      {isAnywhere ? (
-                        <Compass className="w-3.5 h-3.5 text-muted-foreground" />
-                      ) : (
-                        <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
-                      )}
-                    </span>
-                    <span className="flex flex-col min-w-0 flex-1">
-                      <span className="text-sm font-medium text-foreground truncate">{city}</span>
-                      {country && <span className="text-xs text-muted-foreground leading-tight">{country}</span>}
-                    </span>
-                    {codes.length > 0 && (
-                      <span className="flex gap-1 shrink-0">
-                        {codes.map((code) => (
-                          <span key={code} className="text-xs font-mono text-muted-foreground bg-secondary border border-border rounded px-1 py-0.5">
-                            {code}
-                          </span>
-                        ))}
-                      </span>
-                    )}
-                  </div>
-                </React.Fragment>
+                </div>
               );
             })}
           </div>
